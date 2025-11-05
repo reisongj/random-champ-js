@@ -375,7 +375,7 @@ export const useAppStore = create<AppStore>()(
         
         if (team) {
           set({
-            selectedChampions: team.team,
+            selectedChampions: team.team as Record<Lane, string | null>,
             rerolledLanes: team.rerolledLanes,
             pendingSelections: team.pendingSelections,
             hasUsedReroll: team.hasUsedReroll ?? Object.keys(team.rerolledLanes).length > 0, // Default to true if rerolled lanes exist (for old data)
