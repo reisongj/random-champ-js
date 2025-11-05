@@ -48,6 +48,11 @@ VITE_API_URL=https://your-api-url.com/api
 
 If not set, it defaults to `http://localhost:3001/api`.
 
+**Important for Multi-User Access**: 
+- If you want users on different IPs to see each other's teams, see `NETWORK_SETUP.md`
+- Both users must point to the same API server
+- The server must be accessible from all devices (not just localhost)
+
 ## API Endpoints Required
 
 Your backend needs to implement these endpoints:

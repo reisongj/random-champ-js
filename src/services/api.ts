@@ -23,7 +23,7 @@ class ApiService {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch teams: ${response.statusText}`);
+        throw new Error(`Failed to fetch teams: ${response.statusText} (${response.status})`);
       }
 
       const data = await response.json();
@@ -32,9 +32,10 @@ class ApiService {
         return data.teams;
       }
       // If response format is unexpected, return empty array
+      console.warn('API returned unexpected format:', data);
       return [];
     } catch (error) {
-      console.error('Error fetching saved teams:', error);
+      console.error(`Error fetching saved teams from ${this.baseUrl}:`, error);
       // Re-throw the error so the caller can handle it appropriately
       // This prevents silently returning empty array which would clear teams
       throw error;
@@ -53,13 +54,13 @@ class ApiService {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to save team: ${response.statusText}`);
+        throw new Error(`Failed to save team: ${response.statusText} (${response.status})`);
       }
 
       const data = await response.json();
       return data.team || team;
     } catch (error) {
-      console.error('Error saving team:', error);
+      console.error(`Error saving team to ${this.baseUrl}:`, error);
       throw error;
     }
   }
@@ -90,4 +91,10 @@ class ApiService {
 
 // Export singleton instance
 export const apiService = new ApiService(API_BASE_URL);
+
+// Log API configuration on startup (helpful for debugging)
+console.log(`🔗 API Base URL: ${API_BASE_URL}`);
+if (API_BASE_URL.includes('localhost')) {
+  console.warn('⚠️  Using localhost - teams will only be shared locally. For network sharing, set VITE_API_URL to your server IP.');
+}
 

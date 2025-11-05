@@ -98,8 +98,15 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`API endpoint: http://localhost:${PORT}/api/teams`);
-  console.log(`Data will be persisted to: ${DATA_FILE}`);
+// Listen on all network interfaces (0.0.0.0) to allow access from other devices
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n=== Server Running ===`);
+  console.log(`Local:    http://localhost:${PORT}`);
+  console.log(`Network:  http://0.0.0.0:${PORT}`);
+  console.log(`API:      http://localhost:${PORT}/api/teams`);
+  console.log(`Data:     ${DATA_FILE}`);
+  console.log(`\nTo access from other devices:`);
+  console.log(`1. Find your local IP address (ipconfig on Windows, ifconfig on Mac/Linux)`);
+  console.log(`2. Use: http://YOUR_IP:${PORT}/api/teams`);
+  console.log(`3. Set VITE_API_URL=http://YOUR_IP:${PORT}/api in your .env file\n`);
 });
