@@ -23,7 +23,7 @@ interface AppStore {
   rerandomizeLane: (lane: Lane) => void;
   selectRerollChampion: (lane: Lane, champion: string) => void;
   lockInTeam: () => Promise<void>;
-  resetAllChampions: () => void;
+  resetAllChampions: () => Promise<void>;
   resetForNewGame: () => void;
   saveAndStartNewTeam: () => void; // Save current team as incomplete and start new one
   displayTeam: (team: Record<Lane, string | null>) => void;
@@ -242,11 +242,22 @@ export const useAppStore = create<AppStore>()(
         })();
       },
 
-      resetAllChampions: () => {
+      resetAllChampions: async () => {
+        // Clear local state immediately for responsive UI
         set({
           playedChampions: new Set<string>(),
           savedTeams: [],
         });
+
+        // Delete teams from database in the background
+        try {
+          await apiService.deleteAllTeams();
+          console.log('All teams deleted from database');
+        } catch (error) {
+          console.error('Failed to delete teams from database:', error);
+          // Don't throw - local state is already cleared, user can continue
+          // The teams will be deleted on next successful reset
+        }
       },
 
       resetForNewGame: () => {

@@ -7,8 +7,8 @@ export default function ResetButton() {
   const { resetAllChampions } = useAppStore();
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const handleReset = () => {
-    resetAllChampions();
+  const handleReset = async () => {
+    await resetAllChampions();
     setShowConfirm(true);
     setTimeout(() => setShowConfirm(false), 2000);
   };

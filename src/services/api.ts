@@ -83,6 +83,28 @@ class ApiService {
       return new Set<string>();
     }
   }
+
+  // Delete all teams from shared storage
+  async deleteAllTeams(): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/teams`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete teams: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      console.log(`Deleted ${data.deletedCount || 0} teams from database`);
+    } catch (error) {
+      console.error(`Error deleting teams from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance
