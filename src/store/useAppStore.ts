@@ -292,15 +292,39 @@ export const useAppStore = create<AppStore>()(
       },
 
       loadSavedTeams: async () => {
+        const state = get();
+        const localTeams = state.savedTeams || [];
+        
         try {
           const teams = await apiService.getSavedTeams();
-          console.log(`Loaded ${teams.length} teams from API`);
+          console.log(`Loaded ${teams.length} teams from API (local: ${localTeams.length})`);
           
-          // Only update if we got a valid response (array, even if empty)
-          // This ensures we get the latest teams from the server
+          // Only update if we got a valid response (array)
           if (Array.isArray(teams)) {
-            set({ savedTeams: teams });
-            console.log(`Updated savedTeams state with ${teams.length} teams`);
+            // Merge local and API teams, preferring API data (which has latest from all users)
+            // Use a Set to deduplicate by timestamp (each team has unique timestamp)
+            const teamMap = new Map<string, SavedTeam>();
+            
+            // Add local teams first (as backup)
+            localTeams.forEach(team => {
+              if (team.timestamp) {
+                teamMap.set(team.timestamp, team);
+              }
+            });
+            
+            // Add/override with API teams (these are authoritative)
+            teams.forEach(team => {
+              if (team.timestamp) {
+                teamMap.set(team.timestamp, team);
+              }
+            });
+            
+            const mergedTeams = Array.from(teamMap.values());
+            // Sort by timestamp (newest first)
+            mergedTeams.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            
+            set({ savedTeams: mergedTeams });
+            console.log(`Updated savedTeams state with ${mergedTeams.length} teams (merged from local + API)`);
           } else {
             console.warn('API returned non-array response, keeping existing teams');
           }
@@ -318,7 +342,7 @@ export const useAppStore = create<AppStore>()(
           }
         } catch (e) {
           console.error('Failed to load saved teams:', e);
-          // Don't clear existing teams on error - preserve what we have
+          // Don't clear existing teams on error - preserve what we have in localStorage
           // The app will continue to work with the existing teams in state
         }
       },
@@ -503,6 +527,7 @@ export const useAppStore = create<AppStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         playedChampions: Array.from(state.playedChampions),
+        savedTeams: state.savedTeams, // Persist saved teams to localStorage
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
@@ -511,7 +536,13 @@ export const useAppStore = create<AppStore>()(
           if (Array.isArray(playedArray)) {
             state.playedChampions = new Set(playedArray);
           }
-          // Load saved teams
+          
+          // Ensure savedTeams is an array (from localStorage)
+          if (!Array.isArray(state.savedTeams)) {
+            state.savedTeams = [];
+          }
+          
+          // Load saved teams from API (this will sync with server and merge/update)
           state.loadSavedTeams();
           // Load incomplete teams
           state.loadIncompleteTeams();
