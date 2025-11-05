@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: random-champ-js
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      # Example: if you need a base path, set VITE_BASE_PATH here
+      # - key: VITE_BASE_PATH
+      #   value: /

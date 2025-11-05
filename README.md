@@ -91,3 +91,7 @@ Champion data is stored in `src/data/champions.ts`. The app uses Riot's Data Dra
 ## License
 
 No license specified.
+
+## Deploying
+
+See `RENDER.md` for a step-by-step Render.com deployment checklist and troubleshooting tips (port binding, start/build commands).
