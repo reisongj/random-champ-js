@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: random-champ-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server-mongodb.cjs
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        value: mongodb+srv://reisongjolaj_db_user:qCfapLuSFatzwOXY@cluster0.7iqidyk.mongodb.net/lol-champions?retryWrites=true&w=majority&appName=Cluster0
+      - key: DB_NAME
+        value: lol-champions
+

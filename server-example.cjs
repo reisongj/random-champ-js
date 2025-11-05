@@ -1,9 +1,8 @@
 // Simple Express.js backend example for shared team storage with persistence
 // Install dependencies: npm install express cors
-// Run: node server-example.js
+// Run: node server-example.cjs
 //
-// NOTE: If your package.json has "type": "module", rename this file to server-example.cjs
-// or create a separate backend package.json without "type": "module"
+// This is the CommonJS version - use this if your package.json has "type": "module"
 
 const express = require('express');
 const cors = require('cors');
@@ -94,6 +93,16 @@ app.delete('/api/teams', (req, res) => {
   res.json({ message: 'All teams cleared' });
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    teams: teams.length,
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
+  });
+});
+
 // Graceful shutdown - save on exit
 process.on('SIGINT', () => {
   console.log('\nSaving teams before shutdown...');
@@ -113,9 +122,11 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Local:    http://localhost:${PORT}`);
   console.log(`Network:  http://0.0.0.0:${PORT}`);
   console.log(`API:      http://localhost:${PORT}/api/teams`);
+  console.log(`Health:   http://localhost:${PORT}/health`);
   console.log(`Data:     ${DATA_FILE}`);
-  console.log(`\nTo access from other devices:`);
-  console.log(`1. Find your local IP address (ipconfig on Windows, ifconfig on Mac/Linux)`);
-  console.log(`2. Use: http://YOUR_IP:${PORT}/api/teams`);
-  console.log(`3. Set VITE_API_URL=http://YOUR_IP:${PORT}/api in your .env file\n`);
+  console.log(`\n⚠ IMPORTANT: On Render free tier:`);
+  console.log(`  - Data is stored in memory (will be lost on restart)`);
+  console.log(`  - Service sleeps after 15 min inactivity`);
+  console.log(`  - First request after sleep takes ~30 seconds\n`);
 });
+
