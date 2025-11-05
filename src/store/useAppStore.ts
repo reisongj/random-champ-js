@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Lane, championPools } from '../data/champions';
 import { SavedTeam, IncompleteTeam } from '../types';
+import { apiService } from '../services/api';
 
 interface AppStore {
   // State
@@ -21,14 +22,15 @@ interface AppStore {
   randomizeChampion: (lane: Lane) => void;
   rerandomizeLane: (lane: Lane) => void;
   selectRerollChampion: (lane: Lane, champion: string) => void;
-  lockInTeam: () => void;
+  lockInTeam: () => Promise<void>;
   resetAllChampions: () => void;
   resetForNewGame: () => void;
   saveAndStartNewTeam: () => void; // Save current team as incomplete and start new one
   displayTeam: (team: Record<Lane, string | null>) => void;
   returnToRandomize: () => void;
-  loadSavedTeams: () => void;
-  saveTeam: () => void;
+  loadSavedTeams: () => Promise<void>;
+  saveTeam: () => Promise<void>;
+  syncUsedChampionsFromSavedTeams: () => Promise<void>;
   saveIncompleteTeam: () => void;
   loadIncompleteTeams: () => void;
   loadIncompleteTeam: (id: string) => void;
@@ -163,7 +165,7 @@ export const useAppStore = create<AppStore>()(
         get().saveIncompleteTeam();
       },
 
-      lockInTeam: () => {
+      lockInTeam: async () => {
         const state = get();
         
         // Check if all pending selections are made
@@ -197,8 +199,12 @@ export const useAppStore = create<AppStore>()(
           hasUsedReroll: false,
         });
 
-        // Save team
-        get().saveTeam();
+        // Save team (async)
+        try {
+          await get().saveTeam();
+        } catch (e) {
+          console.error('Failed to save team during lock-in:', e);
+        }
         
         // Delete current incomplete team if it exists
         if (state.currentTeamId) {
@@ -258,19 +264,24 @@ export const useAppStore = create<AppStore>()(
         get().resetForNewGame();
       },
 
-      loadSavedTeams: () => {
+      loadSavedTeams: async () => {
         try {
-          const stored = localStorage.getItem('saved-teams');
-          if (stored) {
-            const teams = JSON.parse(stored) as SavedTeam[];
-            set({ savedTeams: teams });
-          }
+          const teams = await apiService.getSavedTeams();
+          set({ savedTeams: teams });
+          
+          // Sync used champions from saved teams
+          const usedChampions = await apiService.getUsedChampions();
+          const currentPlayed = get().playedChampions;
+          const combinedPlayed = new Set([...currentPlayed, ...usedChampions]);
+          set({ playedChampions: combinedPlayed });
         } catch (e) {
           console.error('Failed to load saved teams:', e);
+          // Fallback to empty array on error
+          set({ savedTeams: [] });
         }
       },
 
-      saveTeam: () => {
+      saveTeam: async () => {
         const state = get();
         const team: SavedTeam = {
           timestamp: new Date().toISOString(),
@@ -282,20 +293,47 @@ export const useAppStore = create<AppStore>()(
           return;
         }
 
-        const newSavedTeams = [...state.savedTeams, team];
-        set({ savedTeams: newSavedTeams });
-
         try {
-          localStorage.setItem('saved-teams', JSON.stringify(newSavedTeams));
+          // Save to shared API
+          const savedTeam = await apiService.saveTeam(team);
+          
+          // Update local state with the saved team
+          const newSavedTeams = [...state.savedTeams, savedTeam];
+          set({ savedTeams: newSavedTeams });
+          
+          // Update used champions from the saved team
+          const usedChampions = new Set(state.playedChampions);
+          Object.values(savedTeam.team).forEach(champion => {
+            if (champion) {
+              usedChampions.add(champion);
+            }
+          });
+          set({ playedChampions: usedChampions });
         } catch (e) {
           console.error('Failed to save team:', e);
+          // Still update local state even if API call fails
+          const newSavedTeams = [...state.savedTeams, team];
+          set({ savedTeams: newSavedTeams });
         }
       },
 
       getAvailableChampions: (lane) => {
         const state = get();
+        // Get all champions used in saved teams
+        const savedTeamChampions = new Set<string>();
+        state.savedTeams.forEach(team => {
+          Object.values(team.team).forEach(champion => {
+            if (champion) {
+              savedTeamChampions.add(champion);
+            }
+          });
+        });
+        
+        // Filter out champions that are in playedChampions OR in any saved team
         return championPools[lane].filter(
-          (champion) => !state.playedChampions.has(champion)
+          (champion) => 
+            !state.playedChampions.has(champion) && 
+            !savedTeamChampions.has(champion)
         );
       },
 
@@ -403,6 +441,17 @@ export const useAppStore = create<AppStore>()(
           localStorage.setItem('incomplete-teams', JSON.stringify(newIncompleteTeams));
         } catch (e) {
           console.error('Failed to delete incomplete team:', e);
+        }
+      },
+
+      syncUsedChampionsFromSavedTeams: async () => {
+        try {
+          const usedChampions = await apiService.getUsedChampions();
+          const currentPlayed = get().playedChampions;
+          const combinedPlayed = new Set([...currentPlayed, ...usedChampions]);
+          set({ playedChampions: combinedPlayed });
+        } catch (e) {
+          console.error('Failed to sync used champions:', e);
         }
       },
     }),

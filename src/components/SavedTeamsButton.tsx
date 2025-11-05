@@ -8,7 +8,7 @@ export default function SavedTeamsButton() {
   const { savedTeams, loadSavedTeams } = useAppStore();
 
   useEffect(() => {
-    loadSavedTeams();
+    loadSavedTeams().catch(console.error);
   }, [loadSavedTeams]);
 
   return (
@@ -46,7 +46,7 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
   const { savedTeams, displayTeam, returnToRandomize, loadSavedTeams } = useAppStore();
 
   useEffect(() => {
-    loadSavedTeams();
+    loadSavedTeams().catch(console.error);
   }, [loadSavedTeams]);
 
   const handleDisplay = (team: Record<string, string | null>) => {

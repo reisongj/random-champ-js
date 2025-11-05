@@ -18,13 +18,24 @@ function App() {
   } = useAppStore();
 
   useEffect(() => {
-    loadSavedTeams();
+    // Load saved teams on mount
+    loadSavedTeams().catch(console.error);
+    
+    // Periodically sync saved teams (every 30 seconds) to get updates from other users
+    const syncInterval = setInterval(() => {
+      loadSavedTeams().catch(console.error);
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(syncInterval);
   }, [loadSavedTeams]);
 
   // Set background image with base URL for GitHub Pages
   useEffect(() => {
     const bgImage = `${import.meta.env.BASE_URL}pxfuel.jpg`;
-    document.body.style.backgroundImage = `linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(147, 51, 234, 0.1) 50%, rgba(239, 68, 68, 0.1) 100%), linear-gradient(to bottom, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.4)), url(${bgImage})`;
+    document.body.style.backgroundImage = `linear-gradient(to bottom, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(147, 51, 234, 0.1) 50%, rgba(239, 68, 68, 0.1) 100%), url(${bgImage})`;
+    document.body.style.backgroundSize = 'cover';
+    document.body.style.backgroundPosition = 'center';
+    document.body.style.backgroundRepeat = 'no-repeat';
   }, []);
 
   // Check if all lanes are randomized
@@ -36,6 +47,8 @@ function App() {
     <div className="min-h-screen text-slate-50 flex flex-col overflow-auto relative">
       {/* Dark gradient overlay at top */}
       <div className="fixed top-0 left-0 right-0 h-96 bg-gradient-to-b from-indigo-950/90 via-indigo-950/50 to-transparent pointer-events-none z-0" />
+      {/* Dark gradient overlay at bottom for smooth transition */}
+      <div className="fixed bottom-0 left-0 right-0 h-96 bg-gradient-to-t from-indigo-950/90 via-indigo-950/50 to-transparent pointer-events-none z-0" />
       <div className="container mx-auto px-4 py-6 flex flex-col h-full relative z-10">
         {/* Top Left Button */}
         <div className="fixed top-6 flex gap-2 z-20" style={{ left: '24px' }}>
