@@ -106,6 +106,20 @@ Saves a new team.
 }
 ```
 
+## How It Works
+
+1. **Saving Teams**: When a user locks in a team, it's saved to the shared API database
+2. **Syncing Teams**: The app automatically loads all teams from the API every 30 seconds and on page load
+3. **Champion Exclusion**: Champions in ANY saved team (from any user) are automatically excluded from randomization
+4. **Persistence**: The server example uses file-based storage (`teams-data.json`) so teams persist across server restarts
+
+## Important Notes
+
+- **All teams are shared**: Any team locked in by any user is visible to all users
+- **Champions are globally excluded**: Once a champion is in a saved team, it won't be available for randomization for anyone until reset
+- **Auto-sync**: Teams sync every 30 seconds, so you'll see teams created by others within 30 seconds
+- **Reset**: The "Reset All Champions" button only clears local state - it doesn't clear saved teams from the database
+
 ## Testing Without a Backend
 
 If you want to test locally without a backend, the app will show errors in the console but will continue to work. You can modify `src/services/api.ts` to use localStorage as a fallback for testing.

@@ -189,30 +189,57 @@ export const useAppStore = create<AppStore>()(
           }
         });
 
-          // Update selected champions with final choices
-        set({
-          selectedChampions: finalChampions,
-          playedChampions: newPlayedChampions,
-          teamLocked: true,
-          rerolledLanes: {} as Record<Lane, { original: string; rerolled: string }>,
-          pendingSelections: {} as Record<Lane, string | null>,
-          hasUsedReroll: false,
-        });
+        // Create team object for saving
+        const teamToSave: SavedTeam = {
+          timestamp: new Date().toISOString(),
+          team: finalChampions,
+        };
 
-        // Save team (async)
-        try {
-          await get().saveTeam();
-        } catch (e) {
-          console.error('Failed to save team during lock-in:', e);
-        }
-        
-        // Delete current incomplete team if it exists
+        // Delete current incomplete team if it exists (do this immediately)
         if (state.currentTeamId) {
           get().deleteIncompleteTeam(state.currentTeamId);
         }
         
-        // Reset for new game
+        // Add team to saved teams immediately (optimistic update)
+        // This ensures it shows up right away in the saved teams list
+        const updatedSavedTeams = [...state.savedTeams, teamToSave];
+        
+        // Reset for new game IMMEDIATELY (optimistic update - don't wait for API)
         get().resetForNewGame();
+        
+        // Update played champions and saved teams after reset
+        set({ 
+          playedChampions: newPlayedChampions,
+          savedTeams: updatedSavedTeams,
+        });
+
+        // Save team in the background (don't block UI)
+        // This ensures the UI is responsive while the API call happens
+        (async () => {
+          try {
+            // Save to shared API
+            const savedTeam = await apiService.saveTeam(teamToSave);
+            console.log('Team saved to API successfully:', savedTeam);
+            
+            // Reload all teams from API to ensure we have the latest from all users
+            // This will update the savedTeams with the server's version (which might have an ID or other metadata)
+            await get().loadSavedTeams();
+            
+            // Update used champions from the saved team
+            const currentPlayed = get().playedChampions;
+            const usedChampions = new Set(currentPlayed);
+            Object.values(savedTeam.team).forEach(champion => {
+              if (champion) {
+                usedChampions.add(champion);
+              }
+            });
+            set({ playedChampions: usedChampions });
+          } catch (e) {
+            console.error('Failed to save team during lock-in:', e);
+            // Team wasn't saved to API, but it's in local state
+            // The next sync will try to save it again
+          }
+        })();
       },
 
       resetAllChampions: () => {
@@ -267,12 +294,16 @@ export const useAppStore = create<AppStore>()(
       loadSavedTeams: async () => {
         try {
           const teams = await apiService.getSavedTeams();
+          console.log(`Loaded ${teams.length} teams from API`);
+          
           // Only update if we got a valid response (array, even if empty)
           // This ensures we get the latest teams from the server
           if (Array.isArray(teams)) {
             set({ savedTeams: teams });
+            console.log(`Updated savedTeams state with ${teams.length} teams`);
+          } else {
+            console.warn('API returned non-array response, keeping existing teams');
           }
-          // If teams is not an array, something went wrong - don't update
           
           // Sync used champions from saved teams
           try {
@@ -280,6 +311,7 @@ export const useAppStore = create<AppStore>()(
             const currentPlayed = get().playedChampions;
             const combinedPlayed = new Set([...currentPlayed, ...usedChampions]);
             set({ playedChampions: combinedPlayed });
+            console.log(`Synced ${usedChampions.size} used champions from saved teams`);
           } catch (champError) {
             console.error('Failed to sync used champions:', champError);
             // Don't fail the whole operation if this fails
@@ -306,10 +338,11 @@ export const useAppStore = create<AppStore>()(
         try {
           // Save to shared API
           const savedTeam = await apiService.saveTeam(team);
+          console.log('Team saved to API successfully:', savedTeam);
           
-          // Update local state with the saved team
-          const newSavedTeams = [...state.savedTeams, savedTeam];
-          set({ savedTeams: newSavedTeams });
+          // Reload all teams from API to ensure we have the latest from all users
+          // This ensures we see teams created by other users
+          await get().loadSavedTeams();
           
           // Update used champions from the saved team
           const usedChampions = new Set(state.playedChampions);

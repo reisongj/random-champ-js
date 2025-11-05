@@ -8,13 +8,11 @@ import SavedTeamsButton from './components/SavedTeamsButton';
 import IncompleteTeamsButton from './components/IncompleteTeamsButton';
 import StartNewTeamButton from './components/StartNewTeamButton';
 import ImageViewerButton from './components/ImageViewerButton';
-import LockedConfirmation from './components/LockedConfirmation';
 
 function App() {
   const {
     randomizedLanes,
     loadSavedTeams,
-    teamLocked,
   } = useAppStore();
 
   useEffect(() => {
@@ -99,10 +97,6 @@ function App() {
             </div>
           )}
 
-          {/* Locked Confirmation */}
-          {teamLocked && (
-            <LockedConfirmation />
-          )}
         </div>
       </div>
     </div>
