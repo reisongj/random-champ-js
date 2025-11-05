@@ -84,6 +84,30 @@ class ApiService {
     }
   }
 
+  // Delete a specific team by timestamp
+  async deleteTeam(timestamp: string): Promise<void> {
+    try {
+      // Encode timestamp for URL (in case it contains special characters)
+      const encodedTimestamp = encodeURIComponent(timestamp);
+      const response = await fetch(`${this.baseUrl}/teams/${encodedTimestamp}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete team: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      console.log(`Deleted team with timestamp ${timestamp} from database`);
+    } catch (error) {
+      console.error(`Error deleting team from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
   // Delete all teams from shared storage
   async deleteAllTeams(): Promise<void> {
     try {

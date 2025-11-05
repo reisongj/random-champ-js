@@ -30,6 +30,7 @@ interface AppStore {
   returnToRandomize: () => void;
   loadSavedTeams: () => Promise<void>;
   saveTeam: () => Promise<void>;
+  deleteSavedTeam: (timestamp: string) => Promise<void>;
   syncUsedChampionsFromSavedTeams: () => Promise<void>;
   saveIncompleteTeam: () => void;
   loadIncompleteTeams: () => void;
@@ -394,6 +395,51 @@ export const useAppStore = create<AppStore>()(
           // Still update local state even if API call fails
           const newSavedTeams = [...state.savedTeams, team];
           set({ savedTeams: newSavedTeams });
+        }
+      },
+
+      deleteSavedTeam: async (timestamp: string) => {
+        const state = get();
+        
+        try {
+          // Delete from API
+          await apiService.deleteTeam(timestamp);
+          console.log('Team deleted from API successfully');
+          
+          // Remove from local state immediately
+          const updatedTeams = state.savedTeams.filter(team => team.timestamp !== timestamp);
+          set({ savedTeams: updatedTeams });
+          
+          // Reload all teams from API to ensure we have the latest
+          await get().loadSavedTeams();
+          
+          // Recalculate used champions from remaining teams
+          const usedChampions = new Set<string>();
+          const remainingTeams = get().savedTeams;
+          remainingTeams.forEach(team => {
+            Object.values(team.team).forEach(champion => {
+              if (champion) {
+                usedChampions.add(champion);
+              }
+            });
+          });
+          set({ playedChampions: usedChampions });
+        } catch (e) {
+          console.error('Failed to delete team:', e);
+          // Remove from local state anyway (optimistic update)
+          const updatedTeams = state.savedTeams.filter(team => team.timestamp !== timestamp);
+          set({ savedTeams: updatedTeams });
+          
+          // Recalculate used champions
+          const usedChampions = new Set<string>();
+          updatedTeams.forEach(team => {
+            Object.values(team.team).forEach(champion => {
+              if (champion) {
+                usedChampions.add(champion);
+              }
+            });
+          });
+          set({ playedChampions: usedChampions });
         }
       },
 

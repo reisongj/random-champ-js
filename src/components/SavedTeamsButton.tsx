@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Trash2 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { Lane } from '../data/champions';
 
@@ -43,7 +43,8 @@ export default function SavedTeamsButton() {
 }
 
 function SavedTeamsContent({ onClose }: { onClose: () => void }) {
-  const { savedTeams, displayTeam, returnToRandomize, loadSavedTeams } = useAppStore();
+  const { savedTeams, displayTeam, returnToRandomize, loadSavedTeams, deleteSavedTeam } = useAppStore();
+  const [deletingTimestamp, setDeletingTimestamp] = useState<string | null>(null);
 
   useEffect(() => {
     loadSavedTeams().catch(console.error);
@@ -52,6 +53,22 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
   const handleDisplay = (team: Record<string, string | null>) => {
     displayTeam(team as Record<Lane, string | null>);
     onClose();
+  };
+
+  const handleDelete = async (timestamp: string) => {
+    if (!confirm('Are you sure you want to delete this team? This will make the champions available for randomization again.')) {
+      return;
+    }
+
+    setDeletingTimestamp(timestamp);
+    try {
+      await deleteSavedTeam(timestamp);
+    } catch (error) {
+      console.error('Failed to delete team:', error);
+      alert('Failed to delete team. Please try again.');
+    } finally {
+      setDeletingTimestamp(null);
+    }
   };
 
   return (
@@ -100,6 +117,14 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
                     className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors text-sm"
                   >
                     Details
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item.timestamp)}
+                    disabled={deletingTimestamp === item.timestamp}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded transition-colors text-sm flex items-center gap-1"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    {deletingTimestamp === item.timestamp ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
               </div>

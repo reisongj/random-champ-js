@@ -111,6 +111,28 @@ app.post('/api/teams', async (req, res) => {
   }
 });
 
+// Delete a specific team by timestamp
+app.delete('/api/teams/:timestamp', async (req, res) => {
+  try {
+    const { timestamp } = req.params;
+    
+    const result = await teamsCollection.deleteOne({ timestamp });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+    
+    console.log(`DELETE /api/teams/${timestamp} - Deleted team`);
+    res.json({ 
+      message: 'Team deleted successfully',
+      deletedCount: result.deletedCount 
+    });
+  } catch (error) {
+    console.error('Error deleting team:', error);
+    res.status(500).json({ error: 'Failed to delete team', message: error.message });
+  }
+});
+
 // Optional: Clear all teams (for testing)
 app.delete('/api/teams', async (req, res) => {
   try {
