@@ -245,6 +245,7 @@ export const useAppStore = create<AppStore>()(
       resetAllChampions: () => {
         set({
           playedChampions: new Set<string>(),
+          savedTeams: [],
         });
       },
 
