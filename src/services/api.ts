@@ -100,7 +100,7 @@ class ApiService {
         throw new Error(`Failed to delete team: ${response.statusText} (${response.status})`);
       }
 
-      const data = await response.json();
+      await response.json();
       console.log(`Deleted team with timestamp ${timestamp} from database`);
     } catch (error) {
       console.error(`Error deleting team from ${this.baseUrl}:`, error);
