@@ -8,6 +8,7 @@ import SavedTeamsButton from './components/SavedTeamsButton';
 import IncompleteTeamsButton from './components/IncompleteTeamsButton';
 import StartNewTeamButton from './components/StartNewTeamButton';
 import ImageViewerButton from './components/ImageViewerButton';
+import AdminButton from './components/AdminButton';
 
 function App() {
   const {
@@ -55,6 +56,7 @@ function App() {
         
         {/* Top Right Buttons */}
         <div className="fixed top-6 flex gap-2 z-20" style={{ right: '24px' }}>
+          <AdminButton />
           <IncompleteTeamsButton />
           <SavedTeamsButton />
         </div>

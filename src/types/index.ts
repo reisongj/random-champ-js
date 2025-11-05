@@ -7,6 +7,7 @@ export interface Team {
 export interface SavedTeam {
   timestamp: string;
   team: Team;
+  isAdminCreated?: boolean; // Flag to indicate if team was created by admin
 }
 
 export interface IncompleteTeam {

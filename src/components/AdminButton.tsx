@@ -1,14 +1,13 @@
 import { useState } from 'react';
+import { Shield, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw, CheckCircle2, X } from 'lucide-react';
-import { useAppStore } from '../store/useAppStore';
+import AdminTeamCreator from './AdminTeamCreator';
 
 const ADMIN_PASSWORD = 'fuzzyisthegoat';
 
-export default function ResetButton() {
-  const { resetAllChampions } = useAppStore();
+export default function AdminButton() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
@@ -18,13 +17,11 @@ export default function ResetButton() {
     setError('');
   };
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
+  const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (password === ADMIN_PASSWORD) {
       setShowPasswordModal(false);
-      await resetAllChampions();
-      setShowConfirm(true);
-      setTimeout(() => setShowConfirm(false), 2000);
+      setShowAdminPanel(true);
       setPassword('');
       setError('');
     } else {
@@ -34,6 +31,7 @@ export default function ResetButton() {
   };
 
   const handleClose = () => {
+    setShowAdminPanel(false);
     setShowPasswordModal(false);
     setPassword('');
     setError('');
@@ -41,15 +39,13 @@ export default function ResetButton() {
 
   return (
     <>
-      <motion.button
+      <button
         onClick={handleOpen}
         className="glass px-3 py-2 text-white rounded-lg transition-all duration-200 border border-white/20 hover:border-white/40 flex items-center gap-2 text-sm"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
       >
-        <RotateCcw className="w-4 h-4" />
-        <span className="hidden sm:inline">Reset champions</span>
-      </motion.button>
+        <Shield className="w-4 h-4" />
+        <span className="hidden sm:inline">Admin</span>
+      </button>
 
       {/* Password Modal */}
       <AnimatePresence>
@@ -70,8 +66,8 @@ export default function ResetButton() {
             >
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold flex items-center gap-2">
-                  <RotateCcw className="w-6 h-6" />
-                  Reset Champions
+                  <Shield className="w-6 h-6" />
+                  Admin Access
                 </h2>
                 <button
                   onClick={handleClose}
@@ -81,16 +77,10 @@ export default function ResetButton() {
                 </button>
               </div>
               
-              <div className="mb-4 bg-red-500/20 border border-red-500/50 rounded-lg p-3">
-                <p className="text-sm text-red-300">
-                  ⚠️ Warning: This will delete ALL saved teams and reset all champions. This action cannot be undone.
-                </p>
-              </div>
-
               <form onSubmit={handlePasswordSubmit}>
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-2">
-                    Admin Password
+                    Password
                   </label>
                   <input
                     type="password"
@@ -99,7 +89,7 @@ export default function ResetButton() {
                       setPassword(e.target.value);
                       setError('');
                     }}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter admin password"
                     autoFocus
                   />
@@ -111,9 +101,9 @@ export default function ResetButton() {
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-semibold"
+                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                   >
-                    Reset All Champions
+                    Submit
                   </button>
                   <button
                     type="button"
@@ -129,17 +119,38 @@ export default function ResetButton() {
         )}
       </AnimatePresence>
 
-      {/* Success Confirmation */}
+      {/* Admin Panel */}
       <AnimatePresence>
-        {showConfirm && (
+        {showAdminPanel && (
           <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className="fixed top-20 left-1/2 transform -translate-x-1/2 glass border border-emerald-500/50 text-white px-6 py-3 rounded-xl shadow-2xl z-50 flex items-center gap-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={handleClose}
           >
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            All Champions Reset!
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-slate-600"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <Shield className="w-6 h-6" />
+                  Admin Panel
+                </h2>
+                <button
+                  onClick={handleClose}
+                  className="text-slate-400 hover:text-white text-2xl"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <AdminTeamCreator onClose={handleClose} />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

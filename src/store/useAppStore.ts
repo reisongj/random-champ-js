@@ -35,6 +35,7 @@ interface AppStore {
   loadIncompleteTeams: () => void;
   loadIncompleteTeam: (id: string) => void;
   deleteIncompleteTeam: (id: string) => void;
+  createAdminTeam: (team: Record<Lane, string | null>) => Promise<void>; // Create a team as admin
   
   // Computed
   getAvailableChampions: (lane: Lane) => string[];
@@ -393,6 +394,47 @@ export const useAppStore = create<AppStore>()(
           // Still update local state even if API call fails
           const newSavedTeams = [...state.savedTeams, team];
           set({ savedTeams: newSavedTeams });
+        }
+      },
+
+      createAdminTeam: async (team: Record<Lane, string | null>) => {
+        const state = get();
+        const adminTeam: SavedTeam = {
+          timestamp: new Date().toISOString(),
+          team: team,
+          isAdminCreated: true,
+        };
+
+        try {
+          // Save to shared API
+          const savedTeam = await apiService.saveTeam(adminTeam);
+          console.log('Admin team saved to API successfully:', savedTeam);
+          
+          // Reload all teams from API to ensure we have the latest
+          await get().loadSavedTeams();
+          
+          // Update used champions from the admin team
+          const usedChampions = new Set(state.playedChampions);
+          Object.values(savedTeam.team).forEach(champion => {
+            if (champion) {
+              usedChampions.add(champion);
+            }
+          });
+          set({ playedChampions: usedChampions });
+        } catch (e) {
+          console.error('Failed to save admin team:', e);
+          // Still update local state even if API call fails
+          const newSavedTeams = [...state.savedTeams, adminTeam];
+          set({ savedTeams: newSavedTeams });
+          
+          // Update played champions locally
+          const usedChampions = new Set(state.playedChampions);
+          Object.values(adminTeam.team).forEach(champion => {
+            if (champion) {
+              usedChampions.add(champion);
+            }
+          });
+          set({ playedChampions: usedChampions });
         }
       },
 
