@@ -21,6 +21,12 @@ function App() {
     loadSavedTeams();
   }, [loadSavedTeams]);
 
+  // Set background image with base URL for GitHub Pages
+  useEffect(() => {
+    const bgImage = `${import.meta.env.BASE_URL}pxfuel.jpg`;
+    document.body.style.backgroundImage = `linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(147, 51, 234, 0.1) 50%, rgba(239, 68, 68, 0.1) 100%), linear-gradient(to bottom, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.4)), url(${bgImage})`;
+  }, []);
+
   // Check if all lanes are randomized
   const allLanesRandomized = randomizedLanes.size === Object.keys(championPools).length;
   // Show re-randomize section if all lanes are randomized
@@ -55,7 +61,7 @@ function App() {
           <div className="flex justify-center mb-1">
             <div className="h-24 md:h-32 lg:h-40 overflow-hidden flex items-center justify-center">
               <img 
-                src="/League-of-Legends-Logo-2009-2019.png" 
+                src={`${import.meta.env.BASE_URL}League-of-Legends-Logo-2009-2019.png`}
                 alt="League of Legends" 
                 className="h-full w-auto object-contain"
               />

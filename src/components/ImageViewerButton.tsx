@@ -33,7 +33,7 @@ export default function ImageViewerButton() {
               onClick={(e) => e.stopPropagation()}
             >
               <img
-                src="/IMG_7133.jpeg"
+                src={`${import.meta.env.BASE_URL}IMG_7133.jpeg`}
                 alt="View"
                 className="max-w-full max-h-[90vh] object-contain rounded-lg"
               />

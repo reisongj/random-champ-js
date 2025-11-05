@@ -314,7 +314,7 @@ export default function Lane({ lane }: LaneProps) {
                   <div className="relative w-16 h-16">
                     {/* Base white low opacity icon */}
                     <img
-                      src="/perspective-dice-random-svgrepo-com.svg"
+                      src={`${import.meta.env.BASE_URL}perspective-dice-random-svgrepo-com.svg`}
                       alt="Dice"
                       className={`w-full h-full transition-all duration-200 ${
                         availableChampions.length === 0 || isAnimating
@@ -334,8 +334,8 @@ export default function Lane({ lane }: LaneProps) {
                       }`}
                       style={{
                         background: 'linear-gradient(135deg, #ec4899 0%, #14b8a6 100%)',
-                        maskImage: 'url(/perspective-dice-random-svgrepo-com.svg)',
-                        WebkitMaskImage: 'url(/perspective-dice-random-svgrepo-com.svg)',
+                        maskImage: `url(${import.meta.env.BASE_URL}perspective-dice-random-svgrepo-com.svg)`,
+                        WebkitMaskImage: `url(${import.meta.env.BASE_URL}perspective-dice-random-svgrepo-com.svg)`,
                         maskSize: 'contain',
                         WebkitMaskSize: 'contain',
                         maskRepeat: 'no-repeat',
