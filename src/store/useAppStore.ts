@@ -267,17 +267,27 @@ export const useAppStore = create<AppStore>()(
       loadSavedTeams: async () => {
         try {
           const teams = await apiService.getSavedTeams();
-          set({ savedTeams: teams });
+          // Only update if we got a valid response (array, even if empty)
+          // This ensures we get the latest teams from the server
+          if (Array.isArray(teams)) {
+            set({ savedTeams: teams });
+          }
+          // If teams is not an array, something went wrong - don't update
           
           // Sync used champions from saved teams
-          const usedChampions = await apiService.getUsedChampions();
-          const currentPlayed = get().playedChampions;
-          const combinedPlayed = new Set([...currentPlayed, ...usedChampions]);
-          set({ playedChampions: combinedPlayed });
+          try {
+            const usedChampions = await apiService.getUsedChampions();
+            const currentPlayed = get().playedChampions;
+            const combinedPlayed = new Set([...currentPlayed, ...usedChampions]);
+            set({ playedChampions: combinedPlayed });
+          } catch (champError) {
+            console.error('Failed to sync used champions:', champError);
+            // Don't fail the whole operation if this fails
+          }
         } catch (e) {
           console.error('Failed to load saved teams:', e);
-          // Fallback to empty array on error
-          set({ savedTeams: [] });
+          // Don't clear existing teams on error - preserve what we have
+          // The app will continue to work with the existing teams in state
         }
       },
 

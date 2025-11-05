@@ -27,11 +27,17 @@ class ApiService {
       }
 
       const data = await response.json();
-      return data.teams || [];
+      // Ensure we return an array
+      if (Array.isArray(data.teams)) {
+        return data.teams;
+      }
+      // If response format is unexpected, return empty array
+      return [];
     } catch (error) {
       console.error('Error fetching saved teams:', error);
-      // Return empty array on error to allow app to continue working
-      return [];
+      // Re-throw the error so the caller can handle it appropriately
+      // This prevents silently returning empty array which would clear teams
+      throw error;
     }
   }
 
@@ -75,6 +81,8 @@ class ApiService {
       return usedChampions;
     } catch (error) {
       console.error('Error getting used champions:', error);
+      // Return empty set on error - this is safe as it just means
+      // we won't exclude champions from saved teams temporarily
       return new Set<string>();
     }
   }
