@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { useAppStore } from '../store/useAppStore';
-import { Lane as LaneType, laneInfo, championPools, BASE_IMAGE_URL, getChampionUrlName } from '../data/champions';
+import { Lane as LaneType, laneInfo, BASE_IMAGE_URL, getChampionUrlName } from '../data/champions';
 import Tooltip from './Tooltip';
 
 interface LaneProps {
@@ -19,6 +20,7 @@ export default function Lane({ lane }: LaneProps) {
     getAvailableCount,
     rerolledLanes,
     pendingSelections,
+    hasUsedReroll,
   } = useAppStore();
 
   const champion = selectedChampions[lane];
@@ -36,9 +38,13 @@ export default function Lane({ lane }: LaneProps) {
   const [isAnimating, setIsAnimating] = useState(false);
   const [displayedChampion, setDisplayedChampion] = useState<string | null>(null);
   const [displayedImageUrl, setDisplayedImageUrl] = useState<string | null>(null);
-  const animationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const animationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const finalChampionRef = useRef<string | null>(null);
   const prevChampionRef = useRef<string | null>(null);
+  
+  // Check if all lanes are randomized for re-randomize functionality (after state declarations)
+  const allLanesRandomized = randomizedLanes.size === Object.keys(laneInfo).length;
+  const canRerandomize = allLanesRandomized && !hasUsedReroll && availableChampions.length > 0 && !needsSelection && !isAnimating;
 
   // Update displayed champion when animation is not running
   useEffect(() => {
@@ -165,14 +171,11 @@ export default function Lane({ lane }: LaneProps) {
   };
 
   return (
-    <div className="flex flex-col items-center h-full">
-      {/* Lane Header */}
-      <div
-        className="w-full px-4 py-3 rounded-t-lg text-center flex-shrink-0"
-        style={{ backgroundColor: info.color }}
-      >
-        <div className="text-2xl mb-1">{info.icon}</div>
-        <div className="text-sm font-bold uppercase">{info.display}</div>
+    <div className="flex flex-col items-center mt-4">
+      {/* Lane Header - Outside the card */}
+      <div className="w-full mb-4 flex items-center justify-start gap-1.5">
+        <div className="text-2xl">{info.icon}</div>
+        <div className="text-base md:text-lg font-bold uppercase text-slate-300">{info.display}</div>
         
         {/* Count Badge */}
         <Tooltip
@@ -182,8 +185,8 @@ export default function Lane({ lane }: LaneProps) {
               : 'No champions available'
           }
         >
-          <div className="mt-2 inline-block px-3 py-1 bg-black/20 rounded-md border-2 border-white/30">
-            <span className="text-sm font-bold">{availableCount}</span>
+          <div className="inline-flex items-center justify-center px-3 py-1 glass rounded-full">
+            <span className="text-sm font-bold text-slate-200">{availableCount}</span>
           </div>
         </Tooltip>
       </div>
@@ -191,7 +194,7 @@ export default function Lane({ lane }: LaneProps) {
       {/* Champion Display */}
       {needsSelection ? (
         // Show both champions when rerolled and needs selection
-        <div className="w-full bg-slate-700 rounded-b-lg p-4 flex flex-col items-center justify-center flex-1 border-2 border-yellow-500">
+        <div className="w-full glass rounded-2xl p-4 flex flex-col items-center justify-center border border-yellow-500/50 aspect-[5/6]">
           <div className="text-sm font-bold text-yellow-400 mb-3">Choose your champion:</div>
           <div className="flex gap-4 w-full">
             {/* Original Champion */}
@@ -226,56 +229,132 @@ export default function Lane({ lane }: LaneProps) {
       ) : (
         // Normal single champion display
         <div
-          className={`w-full bg-slate-700 rounded-b-lg p-4 flex flex-col items-center justify-center flex-1 border-2 border-slate-600 ${
+          className={`w-full glass rounded-2xl border border-white/20 relative overflow-hidden aspect-[5/6] ${
             isAnimating ? 'animate-pulse' : ''
+          } ${isRandomized ? 'border-emerald-500/30' : ''} ${
+            !champion && !displayedChampion && availableChampions.length > 0 && !isAnimating ? 'hover:border-white/40' : ''
+          } ${
+            canRerandomize ? 'hover:border-yellow-500/50 cursor-pointer' : ''
           }`}
+          onClick={() => {
+            if (canRerandomize) {
+              rerandomizeLane(lane);
+            }
+          }}
         >
           {(displayedChampion || champion) ? (
-            <>
+            <motion.div 
+              className={`w-full h-full flex flex-col relative ${
+                canRerandomize ? 'cursor-pointer' : ''
+              }`}
+              initial={{ padding: '0px' }}
+              animate={{ 
+                padding: isAnimating ? '0px' : '16px 16px 0px 16px'
+              }}
+              transition={{ duration: 0.5, ease: "easeOut", delay: isAnimating ? 0 : 0.3 }}
+              onClick={() => {
+                if (canRerandomize) {
+                  rerandomizeLane(lane);
+                }
+              }}
+            >
+              {/* Champion Image - full during animation, then with padding */}
               {((isAnimating ? displayedImageUrl : imageUrl) && !imageError) ? (
-                <img
+                <motion.img
                   src={isAnimating ? displayedImageUrl! : imageUrl!}
                   alt={displayedChampion || champion || ''}
-                  className={`w-32 h-32 object-contain mb-3 transition-opacity duration-75 ${
-                    isAnimating ? 'opacity-90' : 'opacity-100'
+                  className={`w-full rounded-xl ${
+                    isAnimating ? 'h-full object-cover' : 'object-contain'
                   }`}
+                  style={{
+                    borderRadius: isAnimating ? '0' : '0.75rem',
+                  }}
                   onError={handleImageError}
+                  initial={false}
+                  animate={{ 
+                    opacity: 1,
+                    objectFit: isAnimating ? 'cover' : 'contain'
+                  }}
+                  transition={{ duration: 0.3 }}
                 />
               ) : (
-                <div className="text-6xl mb-3">🎮</div>
+                <div className="w-full h-full flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-slate-800/50 to-slate-900/50">
+                  <div className="text-6xl mb-3">🎮</div>
+                </div>
               )}
-              <div className={`text-lg font-bold text-center px-2 transition-all duration-75 ${
-                isAnimating ? 'opacity-90' : 'opacity-100'
-              }`}>
-                {displayedChampion || champion}
-              </div>
-            </>
+              {/* Champion Name - underneath the image */}
+              <motion.div 
+                className="absolute bottom-0 left-0 right-0 text-left pb-6 px-4"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: isAnimating ? 0 : 0.5 }}
+              >
+                <div className={`text-2xl text-slate-300 drop-shadow-lg transition-all duration-75 ${
+                  isAnimating ? 'opacity-90' : 'opacity-100'
+                }`}>
+                  {displayedChampion || champion}
+                </div>
+              </motion.div>
+            </motion.div>
           ) : (
-            <>
-              <div className="text-6xl mb-3 text-slate-500">?</div>
-              <div className="text-slate-400 text-sm">No champion selected</div>
-            </>
+            // No champion selected - card is clickable to randomize
+            <div 
+              onClick={handleRandomize}
+              className={`w-full h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 group ${
+                availableChampions.length === 0 || isAnimating
+                  ? 'cursor-not-allowed opacity-50'
+                  : 'hover:scale-105'
+              }`}
+            >
+              <div className="flex flex-col items-center gap-2">
+                {/* Dice Icon */}
+                <div className={`relative transition-all duration-200 ${
+                  isAnimating ? 'animate-spin' : 'group-hover:scale-110'
+                }`}>
+                  <div className="relative w-16 h-16">
+                    {/* Base white low opacity icon */}
+                    <img
+                      src="/perspective-dice-random-svgrepo-com.svg"
+                      alt="Dice"
+                      className={`w-full h-full transition-all duration-200 ${
+                        availableChampions.length === 0 || isAnimating
+                          ? 'opacity-20'
+                          : 'opacity-25'
+                      }`}
+                      style={{
+                        filter: 'brightness(0) invert(1)',
+                      }}
+                    />
+                    {/* Gradient overlay on hover */}
+                    <div 
+                      className={`absolute inset-0 transition-opacity duration-200 ${
+                        availableChampions.length === 0 || isAnimating
+                          ? 'opacity-0'
+                          : 'opacity-0 group-hover:opacity-100'
+                      }`}
+                      style={{
+                        background: 'linear-gradient(135deg, #ec4899 0%, #14b8a6 100%)',
+                        maskImage: 'url(/perspective-dice-random-svgrepo-com.svg)',
+                        WebkitMaskImage: 'url(/perspective-dice-random-svgrepo-com.svg)',
+                        maskSize: 'contain',
+                        WebkitMaskSize: 'contain',
+                        maskRepeat: 'no-repeat',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskPosition: 'center',
+                        WebkitMaskPosition: 'center',
+                      }}
+                    />
+                  </div>
+                </div>
+                {/* Text appears on hover */}
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white text-sm">
+                  {isAnimating ? 'Randomizing...' : 'Randomize'}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
-
-      {/* Randomize Button */}
-      <button
-        onClick={handleRandomize}
-        disabled={isRandomized || availableChampions.length === 0 || isAnimating}
-        className={`mt-4 px-6 py-3 rounded-lg font-bold text-white transition-all duration-200 flex-shrink-0 ${
-          isRandomized || availableChampions.length === 0 || isAnimating
-            ? 'bg-slate-600 cursor-not-allowed opacity-50'
-            : 'hover:opacity-90 hover:scale-105 active:scale-95 cursor-pointer'
-        }`}
-        style={{
-          backgroundColor: isRandomized || availableChampions.length === 0 || isAnimating
-            ? undefined
-            : info.color,
-        }}
-      >
-        {isAnimating ? '🎲 RANDOMIZING...' : '🎲 RANDOMIZE'}
-      </button>
     </div>
   );
 }

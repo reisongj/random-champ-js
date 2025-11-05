@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { FileText } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { Lane } from '../data/champions';
 
@@ -14,9 +15,15 @@ export default function IncompleteTeamsButton() {
     <>
       <button
         onClick={() => setShowModal(true)}
-        className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
+        className="glass px-3 py-2 text-white rounded-lg transition-all duration-200 border border-white/20 hover:border-white/40 flex items-center gap-2 text-sm"
       >
-        📋 Incomplete Teams ({incompleteTeams.length})
+        <FileText className="w-4 h-4" />
+        <span className="hidden sm:inline">Incomplete</span>
+        {incompleteTeams.length > 0 && (
+          <span className="glass px-1.5 py-0.5 rounded text-xs border border-white/10">
+            {incompleteTeams.length}
+          </span>
+        )}
       </button>
       {showModal && (
         <div

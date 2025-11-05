@@ -1,3 +1,5 @@
+import { motion } from 'framer-motion';
+import { Save } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 
 export default function StartNewTeamButton() {
@@ -11,12 +13,16 @@ export default function StartNewTeamButton() {
   }
 
   return (
-    <button
+    <motion.button
       onClick={saveAndStartNewTeam}
-      className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
+      className="glass px-3 py-2 text-white rounded-lg transition-all duration-200 border border-blue-400/40 hover:border-blue-400/60 flex items-center gap-2 text-sm"
+      style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)' }}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
     >
-      💾 Save & Start New Team
-    </button>
+      <Save className="w-4 h-4" />
+      <span className="hidden sm:inline">Save & Start New</span>
+    </motion.button>
   );
 }
 

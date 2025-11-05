@@ -35,12 +35,15 @@ export default function ReRandomizeSection() {
               key={lane}
               onClick={() => handleRerandomize(lane as Lane)}
               disabled={!hasAvailable || hasUsedReroll}
-              className={`px-5 py-3 rounded-lg font-bold text-white transition-all duration-200 ${
+              className={`px-5 py-3 rounded-xl font-bold text-white transition-all duration-200 shadow-lg ${
                 hasAvailable && !hasUsedReroll
-                  ? 'hover:opacity-90 hover:scale-105 active:scale-95 cursor-pointer'
-                  : 'opacity-50 cursor-not-allowed'
+                  ? 'hover:scale-110 active:scale-95 cursor-pointer border-2 shadow-xl hover:shadow-2xl'
+                  : 'opacity-50 cursor-not-allowed border-2 border-white/20'
               }`}
-              style={{ backgroundColor: info.color }}
+              style={{ 
+                backgroundColor: info.color,
+                borderColor: hasAvailable && !hasUsedReroll ? `${info.color}80` : undefined,
+              }}
             >
               {info.icon} {info.display} {isRerolledLane && '✓'}
             </button>
