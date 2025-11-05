@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "vite",
+    "start:server": "node server-example.js",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
