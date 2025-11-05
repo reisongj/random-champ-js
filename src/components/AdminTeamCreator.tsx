@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Lane, championPools, laneInfo } from '../data/champions';
 import { useAppStore } from '../store/useAppStore';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle } from 'lucide-react';
 
 interface AdminTeamCreatorProps {
@@ -30,18 +30,11 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
     });
   });
 
-  const handleSelectChampion = (lane: Lane, champion: string) => {
+  const handleSelectChampion = (lane: Lane, value: string) => {
+    const champion = value === '' ? null : value;
     setSelectedChampions(prev => ({
       ...prev,
       [lane]: champion,
-    }));
-    setSubmitStatus('idle');
-  };
-
-  const handleClearLane = (lane: Lane) => {
-    setSelectedChampions(prev => ({
-      ...prev,
-      [lane]: null,
     }));
     setSubmitStatus('idle');
   };
@@ -89,7 +82,7 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
         </p>
       </div>
 
-      {/* Team Selection */}
+      {/* Team Selection with Dropdowns */}
       <div className="space-y-4">
         {(Object.keys(championPools) as Lane[]).map((lane) => {
           const champions = championPools[lane];
@@ -100,54 +93,45 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
 
           return (
             <div key={lane} className="bg-slate-700/50 rounded-lg p-4 border border-slate-600">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{laneIcon}</span>
-                  <h3 className="text-lg font-bold" style={{ color: laneColor }}>
-                    {laneDisplay}
-                  </h3>
-                </div>
-                {selected && (
-                  <button
-                    onClick={() => handleClearLane(lane)}
-                    className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 transition-colors"
-                  >
-                    Clear
-                  </button>
-                )}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl">{laneIcon}</span>
+                <label className="text-lg font-bold" style={{ color: laneColor }}>
+                  {laneDisplay}
+                </label>
               </div>
-
-              {selected ? (
-                <div className="flex items-center gap-2 p-3 bg-slate-600 rounded-lg">
-                  <span className="font-semibold text-white">{selected}</span>
-                  <button
-                    onClick={() => handleClearLane(lane)}
-                    className="ml-auto text-slate-400 hover:text-white"
-                  >
-                    <XCircle className="w-5 h-5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-                  {champions.map((champion) => {
-                    const isUsed = usedChampions.has(champion);
-                    return (
-                      <button
-                        key={champion}
-                        onClick={() => handleSelectChampion(lane, champion)}
-                        disabled={isUsed}
-                        className={`px-3 py-2 rounded-lg text-sm transition-all ${
-                          isUsed
-                            ? 'bg-slate-600 text-slate-500 cursor-not-allowed line-through'
-                            : 'bg-slate-600 hover:bg-slate-500 text-white hover:scale-105'
-                        }`}
-                        title={isUsed ? 'Already in saved team' : undefined}
-                      >
-                        {champion}
-                      </button>
-                    );
-                  })}
-                </div>
+              
+              <select
+                value={selected || ''}
+                onChange={(e) => handleSelectChampion(lane, e.target.value)}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{ 
+                  borderColor: selected ? laneColor : undefined,
+                  borderWidth: selected ? '2px' : '1px'
+                }}
+              >
+                <option value="">-- Select Champion --</option>
+                {champions.map((champion) => {
+                  const isUsed = usedChampions.has(champion);
+                  return (
+                    <option
+                      key={champion}
+                      value={champion}
+                      disabled={isUsed}
+                      style={{ 
+                        color: isUsed ? '#64748b' : '#ffffff',
+                        textDecoration: isUsed ? 'line-through' : 'none'
+                      }}
+                    >
+                      {champion} {isUsed ? '(Already in saved team)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              
+              {selected && (
+                <p className="text-sm text-slate-400 mt-2">
+                  Selected: <span className="text-white font-semibold">{selected}</span>
+                </p>
               )}
             </div>
           );
