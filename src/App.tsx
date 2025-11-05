@@ -7,6 +7,7 @@ import ResetButton from './components/ResetButton';
 import SavedTeamsButton from './components/SavedTeamsButton';
 import IncompleteTeamsButton from './components/IncompleteTeamsButton';
 import StartNewTeamButton from './components/StartNewTeamButton';
+import ImageViewerButton from './components/ImageViewerButton';
 import LockedConfirmation from './components/LockedConfirmation';
 
 function App() {
@@ -41,9 +42,12 @@ function App() {
           <SavedTeamsButton />
         </div>
 
-        {/* Bottom Button */}
+        {/* Bottom Buttons */}
         <div className="fixed bottom-6 flex justify-center w-full z-20" style={{ left: '0' }}>
           <StartNewTeamButton />
+        </div>
+        <div className="fixed bottom-6 flex gap-2 z-20" style={{ right: '24px' }}>
+          <ImageViewerButton />
         </div>
 
         {/* Header */}
