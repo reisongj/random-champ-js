@@ -1,9 +1,5 @@
 import { SavedTeam } from '../types';
-
-// Configure your API endpoint here
-// For production, set this to your backend URL
-// Example: 'https://your-api.com/api' or 'https://your-project.supabase.co/rest/v1'
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import { API_BASE_URL } from '../config';
 
 class ApiService {
   private baseUrl: string;
@@ -94,7 +90,8 @@ export const apiService = new ApiService(API_BASE_URL);
 
 // Log API configuration on startup (helpful for debugging)
 console.log(`🔗 API Base URL: ${API_BASE_URL}`);
-if (API_BASE_URL.includes('localhost')) {
-  console.warn('⚠️  Using localhost - teams will only be shared locally. For network sharing, set VITE_API_URL to your server IP.');
+if (API_BASE_URL.includes('localhost') || API_BASE_URL.includes('your-backend-url')) {
+  console.warn('⚠️  API URL not configured! Teams will not be shared between users.');
+  console.warn('   Edit src/config.ts and set your deployed backend URL.');
 }
 
