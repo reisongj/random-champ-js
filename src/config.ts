@@ -8,7 +8,7 @@
 // IMPORTANT: Replace this with your actual deployed backend URL!
 // This URL will be used by ALL users when they visit your GitHub Pages site
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  'https://your-backend-url.com/api'; // ⚠️ CHANGE THIS to your deployed backend URL
+  'https://random-champ-backend.onrender.com/api'; // ⚠️ CHANGE THIS to your deployed backend URL
 
 // For local development, you can temporarily override:
 // export const API_BASE_URL = 'http://localhost:3001/api';
