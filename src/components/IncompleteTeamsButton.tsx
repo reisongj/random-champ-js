@@ -49,8 +49,17 @@ export default function IncompleteTeamsButton() {
             ) : (
               <div className="space-y-4">
                 {incompleteTeams.map((team) => {
+                  // Parse UTC timestamp and convert to local timezone
                   const date = new Date(team.timestamp);
-                  const dateStr = date.toLocaleString();
+                  const dateStr = date.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                  });
                   const pendingCount = Object.keys(team.pendingSelections).filter(
                     lane => team.pendingSelections[lane as Lane] === null
                   ).length;

@@ -78,16 +78,26 @@ export const useAppStore = create<AppStore>()(
         const newRandomizedLanes = new Set(state.randomizedLanes);
         newRandomizedLanes.add(lane);
 
+        // If starting a new team (no currentTeamId), create one immediately
+        // This ensures champions from this new team are excluded from other incomplete teams
+        const newCurrentTeamId = state.currentTeamId || `team-${Date.now()}`;
+
         set({
           selectedChampions: {
             ...state.selectedChampions,
             [lane]: champion,
           },
           randomizedLanes: newRandomizedLanes,
+          currentTeamId: newCurrentTeamId,
         });
         
         // Save incomplete team when all lanes are randomized
         if (newRandomizedLanes.size === Object.keys(championPools).length) {
+          setTimeout(() => {
+            get().saveIncompleteTeam();
+          }, 100);
+        } else {
+          // Also save incomplete team after first randomization to ensure it's tracked
           setTimeout(() => {
             get().saveIncompleteTeam();
           }, 100);
@@ -496,11 +506,25 @@ export const useAppStore = create<AppStore>()(
           });
         });
         
-        // Filter out champions that are in playedChampions OR in any saved team
+        // Get all champions from incomplete teams (excluding the current team being worked on)
+        const incompleteTeamChampions = new Set<string>();
+        state.incompleteTeams.forEach(team => {
+          // Exclude the current incomplete team - its champions should be available for modification
+          if (team.id !== state.currentTeamId) {
+            Object.values(team.team).forEach(champion => {
+              if (champion) {
+                incompleteTeamChampions.add(champion);
+              }
+            });
+          }
+        });
+        
+        // Filter out champions that are in playedChampions, in any saved team, or in other incomplete teams
         return championPools[lane].filter(
           (champion) => 
             !state.playedChampions.has(champion) && 
-            !savedTeamChampions.has(champion)
+            !savedTeamChampions.has(champion) &&
+            !incompleteTeamChampions.has(champion)
         );
       },
 
@@ -602,7 +626,14 @@ export const useAppStore = create<AppStore>()(
       deleteIncompleteTeam: (id) => {
         const state = get();
         const newIncompleteTeams = state.incompleteTeams.filter(t => t.id !== id);
-        set({ incompleteTeams: newIncompleteTeams });
+        
+        // If the deleted team was the current one, reset currentTeamId
+        const newCurrentTeamId = state.currentTeamId === id ? null : state.currentTeamId;
+        
+        set({ 
+          incompleteTeams: newIncompleteTeams,
+          currentTeamId: newCurrentTeamId,
+        });
 
         try {
           localStorage.setItem('incomplete-teams', JSON.stringify(newIncompleteTeams));
