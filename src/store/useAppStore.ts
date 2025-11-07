@@ -17,6 +17,7 @@ interface AppStore {
   hasUsedReroll: boolean; // Track if ANY reroll has been used for this team (only 1 per team)
   incompleteTeams: IncompleteTeam[];
   currentTeamId: string | null;
+  resetRoles: Set<Lane>; // Track which roles have been reset (champions in these roles are available even if in saved teams)
   
   // Actions
   randomizeChampion: (lane: Lane) => void;
@@ -24,6 +25,7 @@ interface AppStore {
   selectRerollChampion: (lane: Lane, champion: string) => void;
   lockInTeam: () => Promise<void>;
   resetAllChampions: () => Promise<void>;
+  resetChampionsByRoles: (roles: Lane[]) => Promise<void>;
   resetForNewGame: () => void;
   saveAndStartNewTeam: () => void; // Save current team as incomplete and start new one
   displayTeam: (team: Record<Lane, string | null>) => void;
@@ -37,6 +39,7 @@ interface AppStore {
   loadIncompleteTeam: (id: string) => void;
   deleteIncompleteTeam: (id: string) => void;
   createAdminTeam: (team: Record<Lane, string | null>) => Promise<void>; // Create a team as admin
+  createAdminTeamFromSavedTeam: (savedTeam: SavedTeam) => Promise<void>; // Create a team from a SavedTeam object
   
   // Computed
   getAvailableChampions: (lane: Lane) => string[];
@@ -65,6 +68,7 @@ export const useAppStore = create<AppStore>()(
       hasUsedReroll: false,
       incompleteTeams: [],
       currentTeamId: null,
+      resetRoles: new Set<Lane>() as Set<Lane>,
 
       randomizeChampion: (lane) => {
         const state = get();
@@ -259,6 +263,7 @@ export const useAppStore = create<AppStore>()(
         set({
           playedChampions: new Set<string>(),
           savedTeams: [],
+          resetRoles: new Set<Lane>(),
         });
 
         // Delete teams from database in the background
@@ -270,6 +275,43 @@ export const useAppStore = create<AppStore>()(
           // Don't throw - local state is already cleared, user can continue
           // The teams will be deleted on next successful reset
         }
+      },
+
+      resetChampionsByRoles: async (roles: Lane[]) => {
+        const state = get();
+        
+        // If all roles are selected, use the existing resetAllChampions function
+        if (roles.length === Object.keys(championPools).length) {
+          await state.resetAllChampions();
+          return;
+        }
+
+        // Get all champions for the selected roles
+        const championsToReset = new Set<string>();
+        roles.forEach(role => {
+          championPools[role].forEach(champion => {
+            championsToReset.add(champion);
+          });
+        });
+
+        // Remove champions from playedChampions for the selected roles
+        const updatedPlayedChampions = new Set(state.playedChampions);
+        championsToReset.forEach(champion => {
+          updatedPlayedChampions.delete(champion);
+        });
+
+        // Mark these roles as reset so champions in saved teams become available for these roles
+        const updatedResetRoles = new Set(state.resetRoles);
+        roles.forEach(role => {
+          updatedResetRoles.add(role);
+        });
+
+        set({
+          playedChampions: updatedPlayedChampions,
+          resetRoles: updatedResetRoles,
+        });
+
+        console.log(`Reset champions for roles: ${roles.join(', ')}`);
       },
 
       resetForNewGame: () => {
@@ -494,17 +536,63 @@ export const useAppStore = create<AppStore>()(
         }
       },
 
-      getAvailableChampions: (lane) => {
+      createAdminTeamFromSavedTeam: async (savedTeam: SavedTeam) => {
         const state = get();
-        // Get all champions used in saved teams
-        const savedTeamChampions = new Set<string>();
-        state.savedTeams.forEach(team => {
-          Object.values(team.team).forEach(champion => {
+        // Ensure isAdminCreated flag is set
+        const adminTeam: SavedTeam = {
+          ...savedTeam,
+          isAdminCreated: true,
+        };
+
+        try {
+          // Save to shared API
+          const savedTeamResult = await apiService.saveTeam(adminTeam);
+          console.log('Admin team saved to API successfully:', savedTeamResult);
+          
+          // Reload all teams from API to ensure we have the latest
+          await get().loadSavedTeams();
+          
+          // Update used champions from the admin team
+          const usedChampions = new Set(state.playedChampions);
+          Object.values(savedTeamResult.team).forEach(champion => {
             if (champion) {
-              savedTeamChampions.add(champion);
+              usedChampions.add(champion);
             }
           });
-        });
+          set({ playedChampions: usedChampions });
+        } catch (e) {
+          console.error('Failed to save admin team:', e);
+          // Still update local state even if API call fails
+          const newSavedTeams = [...state.savedTeams, adminTeam];
+          set({ savedTeams: newSavedTeams });
+          
+          // Update played champions locally
+          const usedChampions = new Set(state.playedChampions);
+          Object.values(adminTeam.team).forEach(champion => {
+            if (champion) {
+              usedChampions.add(champion);
+            }
+          });
+          set({ playedChampions: usedChampions });
+        }
+      },
+
+      getAvailableChampions: (lane) => {
+        const state = get();
+        const isResetRole = state.resetRoles.has(lane);
+        
+        // Get all champions used in saved teams
+        const savedTeamChampions = new Set<string>();
+        if (!isResetRole) {
+          // Only exclude saved team champions if this role hasn't been reset
+          state.savedTeams.forEach(team => {
+            Object.values(team.team).forEach(champion => {
+              if (champion) {
+                savedTeamChampions.add(champion);
+              }
+            });
+          });
+        }
         
         // Get all champions from incomplete teams (excluding the current team being worked on)
         const incompleteTeamChampions = new Set<string>();
@@ -519,7 +607,7 @@ export const useAppStore = create<AppStore>()(
           }
         });
         
-        // Filter out champions that are in playedChampions, in any saved team, or in other incomplete teams
+        // Filter out champions that are in playedChampions, in any saved team (if role not reset), or in other incomplete teams
         return championPools[lane].filter(
           (champion) => 
             !state.playedChampions.has(champion) && 
