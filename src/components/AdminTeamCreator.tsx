@@ -89,7 +89,7 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
       if (!(lane in team)) return false;
       if (team[lane] !== null && typeof team[lane] !== 'string') return false;
       // Validate champion name exists in the pool for that lane
-      if (team[lane] !== null && !championPools[lane].includes(team[lane])) {
+      if (team[lane] !== null && typeof team[lane] === 'string' && !championPools[lane].includes(team[lane])) {
         return false;
       }
     }
