@@ -1,9 +1,56 @@
 import { useState } from 'react';
-import { Shield, X } from 'lucide-react';
+import { Shield, X, Users, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminTeamCreator from './AdminTeamCreator';
+import AdminChampionRoles from './AdminChampionRoles';
 
 const ADMIN_PASSWORD = 'fuzzyisthegoat';
+
+type AdminTab = 'teams' | 'roles';
+
+function AdminTabs({ onClose }: { onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<AdminTab>('teams');
+
+  return (
+    <div>
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4 border-b border-slate-700">
+        <button
+          onClick={() => setActiveTab('teams')}
+          className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+            activeTab === 'teams'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-slate-400 hover:text-slate-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            <span>Team Creator</span>
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveTab('roles')}
+          className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+            activeTab === 'roles'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-slate-400 hover:text-slate-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            <span>Champion Roles</span>
+          </div>
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      <div>
+        {activeTab === 'teams' && <AdminTeamCreator onClose={onClose} />}
+        {activeTab === 'roles' && <AdminChampionRoles onClose={onClose} />}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminButton() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -149,7 +196,7 @@ export default function AdminButton() {
                 </button>
               </div>
               
-              <AdminTeamCreator onClose={handleClose} />
+              <AdminTabs onClose={handleClose} />
             </motion.div>
           </motion.div>
         )}

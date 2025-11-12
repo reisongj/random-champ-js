@@ -9,6 +9,7 @@ import IncompleteTeamsButton from './components/IncompleteTeamsButton';
 import StartNewTeamButton from './components/StartNewTeamButton';
 import ImageViewerButton from './components/ImageViewerButton';
 import AdminButton from './components/AdminButton';
+import LockInButton from './components/LockInButton';
 
 function App() {
   const {
@@ -62,7 +63,8 @@ function App() {
         </div>
 
         {/* Bottom Buttons */}
-        <div className="fixed bottom-6 flex justify-center w-full z-20" style={{ left: '0' }}>
+        <div className="fixed bottom-6 flex justify-center items-center gap-3 w-full z-20" style={{ left: '0' }}>
+          {allLanesRandomized && <LockInButton />}
           <StartNewTeamButton />
         </div>
         <div className="fixed bottom-6 flex gap-2 z-20" style={{ right: '24px' }}>

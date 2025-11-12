@@ -129,6 +129,87 @@ class ApiService {
       throw error;
     }
   }
+
+  // Get champion roles from the database
+  async getChampionRoles(): Promise<Record<string, string[]>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/champion-roles`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch champion roles: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.roles || {};
+    } catch (error) {
+      console.error(`Error fetching champion roles from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
+  // Save champion roles to the database
+  async saveChampionRoles(roles: Record<string, string[]>): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/champion-roles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ roles }),
+      });
+
+      if (!response.ok) {
+        // Try to get error message from response
+        let errorMessage = `Failed to save champion roles: ${response.statusText} (${response.status})`;
+        try {
+          const errorData = await response.json();
+          if (errorData.error || errorData.message) {
+            errorMessage = errorData.message || errorData.error;
+          }
+        } catch (e) {
+          // If JSON parsing fails, use the default message
+        }
+        throw new Error(errorMessage);
+      }
+
+      await response.json();
+      console.log('Champion roles saved successfully');
+    } catch (error) {
+      console.error(`Error saving champion roles to ${this.baseUrl}:`, error);
+      // Re-throw with more context if it's a network error
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error(`Network error: Unable to connect to ${this.baseUrl}. Make sure the backend server is running.`);
+      }
+      throw error;
+    }
+  }
+
+  // Generate champions.ts file content from database
+  async generateChampionsFile(): Promise<string> {
+    try {
+      const response = await fetch(`${this.baseUrl}/champion-roles/generate`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate file: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.fileContent || '';
+    } catch (error) {
+      console.error(`Error generating champions file from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance
