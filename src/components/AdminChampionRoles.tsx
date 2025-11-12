@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lane, laneInfo, championPools } from '../data/champions';
 import { apiService } from '../services/api';
 import { motion } from 'framer-motion';
-import { Save, Download, Search, CheckCircle2, XCircle } from 'lucide-react';
+import { Save, Search, CheckCircle2, XCircle } from 'lucide-react';
 
 interface AdminChampionRolesProps {
   onClose?: () => void;
@@ -28,11 +28,29 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveErrorMessage, setSaveErrorMessage] = useState<string>('');
-  const [generatedFile, setGeneratedFile] = useState<string>('');
-  const [showGeneratedFile, setShowGeneratedFile] = useState(false);
 
   const allChampions = getAllChampions();
   const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
+
+  // Helper function to get default roles for a champion from championPools
+  const getDefaultRolesForChampion = (champion: string): Lane[] => {
+    const defaultRoles: Lane[] = [];
+    lanes.forEach(lane => {
+      if ((championPools[lane] as readonly string[]).includes(champion)) {
+        defaultRoles.push(lane);
+      }
+    });
+    return defaultRoles;
+  };
+
+  // Initialize all champions with default roles from championPools
+  const initializeDefaultRoles = (): ChampionRoles => {
+    const initialRoles: ChampionRoles = {};
+    allChampions.forEach(champion => {
+      initialRoles[champion] = getDefaultRolesForChampion(champion);
+    });
+    return initialRoles;
+  };
 
   // Load champion roles from API
   useEffect(() => {
@@ -43,26 +61,27 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
     try {
       setIsLoading(true);
       const roles = await apiService.getChampionRoles();
-      // Convert string[] to Lane[] (they're compatible but TypeScript needs explicit cast)
-      const typedRoles: ChampionRoles = {};
+      
+      // Start with default roles for all champions
+      const typedRoles: ChampionRoles = initializeDefaultRoles();
+      
+      // Override with roles from database if they exist
       Object.entries(roles).forEach(([champion, laneStrings]) => {
-        typedRoles[champion] = laneStrings.filter(l => lanes.includes(l as Lane)) as Lane[];
+        if (allChampions.includes(champion)) {
+          // Only use database roles if they're valid lanes
+          const validLanes = laneStrings.filter(l => lanes.includes(l as Lane)) as Lane[];
+          // If database has roles for this champion, use them; otherwise keep defaults
+          if (validLanes.length > 0) {
+            typedRoles[champion] = validLanes;
+          }
+        }
       });
+      
       setChampionRoles(typedRoles);
     } catch (error) {
       console.error('Failed to load champion roles:', error);
       // Initialize with current championPools structure if API fails
-      const initialRoles: ChampionRoles = {};
-      allChampions.forEach(champion => {
-        const roles: Lane[] = [];
-        lanes.forEach(lane => {
-          if ((championPools[lane] as readonly string[]).includes(champion)) {
-            roles.push(lane);
-          }
-        });
-        initialRoles[champion] = roles;
-      });
-      setChampionRoles(initialRoles);
+      setChampionRoles(initializeDefaultRoles());
     } finally {
       setIsLoading(false);
     }
@@ -103,28 +122,6 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
     }
   };
 
-  const handleGenerateFile = async () => {
-    try {
-      const fileContent = await apiService.generateChampionsFile();
-      setGeneratedFile(fileContent);
-      setShowGeneratedFile(true);
-    } catch (error) {
-      console.error('Failed to generate file:', error);
-      alert('Failed to generate champions.ts file');
-    }
-  };
-
-  const handleDownloadFile = () => {
-    const blob = new Blob([generatedFile], { type: 'text/typescript' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'champions.ts';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   const filteredChampions = allChampions.filter(champion =>
     champion.toLowerCase().includes(searchTerm.toLowerCase())
@@ -165,13 +162,6 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
             <Save className="w-4 h-4" />
             {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
-          <button
-            onClick={handleGenerateFile}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Generate File
-          </button>
         </div>
       </div>
 
@@ -206,43 +196,6 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
             Check the browser console for more details.
           </div>
         </motion.div>
-      )}
-
-      {/* Generated File Modal */}
-      {showGeneratedFile && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowGeneratedFile(false)}>
-          <div
-            className="bg-slate-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-slate-600"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Generated champions.ts</h3>
-              <button
-                onClick={() => setShowGeneratedFile(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-            <pre className="bg-slate-900 p-4 rounded-lg overflow-x-auto text-sm text-slate-300 font-mono">
-              <code>{generatedFile}</code>
-            </pre>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={handleDownloadFile}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
-              >
-                Download File
-              </button>
-              <button
-                onClick={() => setShowGeneratedFile(false)}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Champions List */}
