@@ -71,18 +71,24 @@ export const useAppStore = create<AppStore>()(
       incompleteTeams: [],
       currentTeamId: null,
       resetRoles: new Set<Lane>() as Set<Lane>,
-      championPools: defaultChampionPools as Record<Lane, string[]>,
+      championPools: {
+        top: [...defaultChampionPools.top],
+        jungle: [...defaultChampionPools.jungle],
+        mid: [...defaultChampionPools.mid],
+        adc: [...defaultChampionPools.adc],
+        support: [...defaultChampionPools.support],
+      } as Record<Lane, string[]>,
 
       loadChampionPools: async () => {
         try {
           const pools = await apiService.getChampionPools();
           // Ensure all lanes are present, use defaults if missing
           const loadedPools: Record<Lane, string[]> = {
-            top: pools.top || defaultChampionPools.top,
-            jungle: pools.jungle || defaultChampionPools.jungle,
-            mid: pools.mid || defaultChampionPools.mid,
-            adc: pools.adc || defaultChampionPools.adc,
-            support: pools.support || defaultChampionPools.support,
+            top: pools.top || [...defaultChampionPools.top],
+            jungle: pools.jungle || [...defaultChampionPools.jungle],
+            mid: pools.mid || [...defaultChampionPools.mid],
+            adc: pools.adc || [...defaultChampionPools.adc],
+            support: pools.support || [...defaultChampionPools.support],
           };
           set({ championPools: loadedPools });
           console.log('Champion pools loaded from database');
@@ -118,7 +124,6 @@ export const useAppStore = create<AppStore>()(
         });
         
         // Save incomplete team when all lanes are randomized
-        const state = get();
         if (newRandomizedLanes.size === Object.keys(state.championPools).length) {
           setTimeout(() => {
             get().saveIncompleteTeam();
@@ -786,7 +791,13 @@ export const useAppStore = create<AppStore>()(
           
           // Ensure championPools is initialized (use defaults if not in storage)
           if (!state.championPools || Object.keys(state.championPools).length === 0) {
-            state.championPools = defaultChampionPools as Record<Lane, string[]>;
+            state.championPools = {
+              top: [...defaultChampionPools.top],
+              jungle: [...defaultChampionPools.jungle],
+              mid: [...defaultChampionPools.mid],
+              adc: [...defaultChampionPools.adc],
+              support: [...defaultChampionPools.support],
+            } as Record<Lane, string[]>;
           }
           
           // Load champion pools from database (this will override defaults)
