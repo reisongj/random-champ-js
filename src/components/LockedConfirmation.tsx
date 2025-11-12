@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { championPools, laneInfo } from '../data/champions';
+import { Lane, laneInfo } from '../data/champions';
 
 export default function LockedConfirmation() {
-  const { getAllPlayedCount, getAvailableCount } = useAppStore();
+  const { getAllPlayedCount, getAvailableCount, championPools } = useAppStore();
   const [show, setShow] = useState(true);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function LockedConfirmation() {
         <div className="space-y-2">
           {Object.entries(laneInfo).map(([lane, info]) => {
             const remaining = getAvailableCount(lane as keyof typeof laneInfo);
-            const total = championPools[lane as keyof typeof championPools].length;
+            const total = championPools[lane as Lane].length;
 
             return (
               <div key={lane} className="text-sm">

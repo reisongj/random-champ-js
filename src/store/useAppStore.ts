@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Lane, championPools } from '../data/champions';
+import { Lane, championPools as defaultChampionPools } from '../data/champions';
 import { SavedTeam, IncompleteTeam } from '../types';
 import { apiService } from '../services/api';
 
@@ -18,6 +18,7 @@ interface AppStore {
   incompleteTeams: IncompleteTeam[];
   currentTeamId: string | null;
   resetRoles: Set<Lane>; // Track which roles have been reset (champions in these roles are available even if in saved teams)
+  championPools: Record<Lane, string[]>; // Champion pools loaded from database
   
   // Actions
   randomizeChampion: (lane: Lane) => void;
@@ -40,6 +41,7 @@ interface AppStore {
   deleteIncompleteTeam: (id: string) => void;
   createAdminTeam: (team: Record<Lane, string | null>) => Promise<void>; // Create a team as admin
   createAdminTeamFromSavedTeam: (savedTeam: SavedTeam) => Promise<void>; // Create a team from a SavedTeam object
+  loadChampionPools: () => Promise<void>; // Load champion pools from database
   
   // Computed
   getAvailableChampions: (lane: Lane) => string[];
@@ -69,6 +71,26 @@ export const useAppStore = create<AppStore>()(
       incompleteTeams: [],
       currentTeamId: null,
       resetRoles: new Set<Lane>() as Set<Lane>,
+      championPools: defaultChampionPools as Record<Lane, string[]>,
+
+      loadChampionPools: async () => {
+        try {
+          const pools = await apiService.getChampionPools();
+          // Ensure all lanes are present, use defaults if missing
+          const loadedPools: Record<Lane, string[]> = {
+            top: pools.top || defaultChampionPools.top,
+            jungle: pools.jungle || defaultChampionPools.jungle,
+            mid: pools.mid || defaultChampionPools.mid,
+            adc: pools.adc || defaultChampionPools.adc,
+            support: pools.support || defaultChampionPools.support,
+          };
+          set({ championPools: loadedPools });
+          console.log('Champion pools loaded from database');
+        } catch (error) {
+          console.error('Failed to load champion pools from database, using defaults:', error);
+          // Keep using defaults if API fails
+        }
+      },
 
       randomizeChampion: (lane) => {
         const state = get();
@@ -96,7 +118,8 @@ export const useAppStore = create<AppStore>()(
         });
         
         // Save incomplete team when all lanes are randomized
-        if (newRandomizedLanes.size === Object.keys(championPools).length) {
+        const state = get();
+        if (newRandomizedLanes.size === Object.keys(state.championPools).length) {
           setTimeout(() => {
             get().saveIncompleteTeam();
           }, 100);
@@ -281,7 +304,7 @@ export const useAppStore = create<AppStore>()(
         const state = get();
         
         // If all roles are selected, use the existing resetAllChampions function
-        if (roles.length === Object.keys(championPools).length) {
+        if (roles.length === Object.keys(state.championPools).length) {
           await state.resetAllChampions();
           return;
         }
@@ -289,7 +312,7 @@ export const useAppStore = create<AppStore>()(
         // Get all champions for the selected roles
         const championsToReset = new Set<string>();
         roles.forEach(role => {
-          championPools[role].forEach(champion => {
+          state.championPools[role].forEach(champion => {
             championsToReset.add(champion);
           });
         });
@@ -608,7 +631,7 @@ export const useAppStore = create<AppStore>()(
         });
         
         // Filter out champions that are in playedChampions, in any saved team (if role not reset), or in other incomplete teams
-        return championPools[lane].filter(
+        return state.championPools[lane].filter(
           (champion) => 
             !state.playedChampions.has(champion) && 
             !savedTeamChampions.has(champion) &&
@@ -623,7 +646,7 @@ export const useAppStore = create<AppStore>()(
       getAllPlayedCount: () => {
         const state = get();
         const allChampions = new Set<string>();
-        Object.values(championPools).forEach((champs) => {
+        Object.values(state.championPools).forEach((champs) => {
           champs.forEach((champ) => allChampions.add(champ));
         });
         return state.playedChampions.size;
@@ -761,6 +784,13 @@ export const useAppStore = create<AppStore>()(
             state.savedTeams = [];
           }
           
+          // Ensure championPools is initialized (use defaults if not in storage)
+          if (!state.championPools || Object.keys(state.championPools).length === 0) {
+            state.championPools = defaultChampionPools as Record<Lane, string[]>;
+          }
+          
+          // Load champion pools from database (this will override defaults)
+          state.loadChampionPools();
           // Load saved teams from API (this will sync with server and merge/update)
           state.loadSavedTeams();
           // Load incomplete teams

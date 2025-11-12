@@ -175,6 +175,43 @@ app.get('/api/champion-roles', async (req, res) => {
   }
 });
 
+// Get champion pools (structured by lane)
+app.get('/api/champion-pools', async (req, res) => {
+  try {
+    const roles = await championRolesCollection.find({}).toArray();
+    
+    // Build champion pools by lane
+    const championPools = {
+      top: [],
+      jungle: [],
+      mid: [],
+      adc: [],
+      support: []
+    };
+    
+    roles.forEach(role => {
+      if (role.lanes && Array.isArray(role.lanes)) {
+        role.lanes.forEach(lane => {
+          if (championPools[lane]) {
+            championPools[lane].push(role.champion);
+          }
+        });
+      }
+    });
+    
+    // Sort champions in each lane
+    Object.keys(championPools).forEach(lane => {
+      championPools[lane].sort();
+    });
+    
+    console.log(`GET /api/champion-pools - Returning champion pools for ${roles.length} champions`);
+    res.json({ championPools });
+  } catch (error) {
+    console.error('Error fetching champion pools:', error);
+    res.status(500).json({ error: 'Failed to fetch champion pools', message: error.message });
+  }
+});
+
 // Save champion roles
 app.post('/api/champion-roles', async (req, res) => {
   try {

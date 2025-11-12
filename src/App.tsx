@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAppStore } from './store/useAppStore';
-import { championPools, laneInfo } from './data/champions';
+import { laneInfo } from './data/champions';
 import Lane from './components/Lane';
 import ReRandomizeSection from './components/ReRandomizeSection';
 import ResetButton from './components/ResetButton';
@@ -14,8 +14,15 @@ import LockInButton from './components/LockInButton';
 function App() {
   const {
     randomizedLanes,
+    championPools,
     loadSavedTeams,
+    loadChampionPools,
   } = useAppStore();
+
+  useEffect(() => {
+    // Load champion pools from database on mount
+    loadChampionPools().catch(console.error);
+  }, [loadChampionPools]);
 
   useEffect(() => {
     // Load saved teams on mount

@@ -210,6 +210,28 @@ class ApiService {
       throw error;
     }
   }
+
+  // Get champion pools (structured by lane) from database
+  async getChampionPools(): Promise<Record<string, string[]>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/champion-pools`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch champion pools: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.championPools || {};
+    } catch (error) {
+      console.error(`Error fetching champion pools from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

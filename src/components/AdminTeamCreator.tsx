@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Lane, championPools, laneInfo } from '../data/champions';
+import { Lane, laneInfo } from '../data/champions';
 import { useAppStore } from '../store/useAppStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle, Upload, FileText } from 'lucide-react';
@@ -10,7 +10,7 @@ interface AdminTeamCreatorProps {
 }
 
 export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
-  const { createAdminTeam, createAdminTeamFromSavedTeam, savedTeams } = useAppStore();
+  const { createAdminTeam, createAdminTeamFromSavedTeam, savedTeams, championPools } = useAppStore();
   const [selectedChampions, setSelectedChampions] = useState<Record<Lane, string | null>>({
     top: null,
     jungle: null,
@@ -91,7 +91,7 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
       // Validate champion name exists in the pool for that lane
       if (team[lane] !== null && typeof team[lane] === 'string') {
         const championName = team[lane] as string;
-        if (!(championPools[lane] as readonly string[]).includes(championName)) {
+        if (!championPools[lane].includes(championName)) {
           return false;
         }
       }
