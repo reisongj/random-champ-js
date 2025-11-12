@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Save, Download, Search, CheckCircle2, XCircle } from 'lucide-react';
 
 interface AdminChampionRolesProps {
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 interface ChampionRoles {
@@ -21,7 +21,7 @@ function getAllChampions(): string[] {
   return Array.from(allChampions).sort();
 }
 
-export default function AdminChampionRoles({ onClose }: AdminChampionRolesProps) {
+export default function AdminChampionRoles({}: AdminChampionRolesProps) {
   const [championRoles, setChampionRoles] = useState<ChampionRoles>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
