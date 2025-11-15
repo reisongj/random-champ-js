@@ -328,6 +328,30 @@ export const useAppStore = create<AppStore>()(
           savedTeams: updatedSavedTeams,
         });
 
+        // Remove champions from available (they should already be removed from when rolled, but ensure they are)
+        // This is important in case champions were added via admin or other means
+        const removePromises: Promise<void>[] = [];
+        Object.entries(finalChampions).forEach(([lane, champion]) => {
+          if (champion) {
+            removePromises.push(
+              apiService.removeAvailableChampion(lane as Lane, champion).catch(error => {
+                console.error(`Failed to remove ${champion} from available for ${lane}:`, error);
+                // Don't fail the whole operation if one removal fails
+              })
+            );
+          }
+        });
+        await Promise.all(removePromises);
+
+        // Update local available champions state
+        const updatedAvailableChampions = { ...state.availableChampions };
+        Object.entries(finalChampions).forEach(([lane, champion]) => {
+          if (champion && updatedAvailableChampions[lane as Lane]) {
+            updatedAvailableChampions[lane as Lane] = updatedAvailableChampions[lane as Lane].filter(c => c !== champion);
+          }
+        });
+        set({ availableChampions: updatedAvailableChampions });
+
         // Save team in the background (don't block UI)
         // This ensures the UI is responsive while the API call happens
         (async () => {
@@ -577,10 +601,40 @@ export const useAppStore = create<AppStore>()(
       deleteSavedTeam: async (timestamp: string) => {
         const state = get();
         
+        // Find the team being deleted before we delete it
+        const teamToDelete = state.savedTeams.find(team => team.timestamp === timestamp);
+        
         try {
           // Delete from API
           await apiService.deleteTeam(timestamp);
           console.log('Team deleted from API successfully');
+          
+          // Restore champions from deleted team back to available
+          if (teamToDelete) {
+            const restorePromises: Promise<void>[] = [];
+            const affectedLanes = new Set<Lane>();
+            
+            Object.entries(teamToDelete.team).forEach(([lane, champion]) => {
+              if (champion) {
+                affectedLanes.add(lane as Lane);
+                // Restore this specific champion back to available via API
+                restorePromises.push(
+                  apiService.restoreAvailableChampion(lane as Lane, champion).catch(error => {
+                    console.error(`Failed to restore ${champion} for ${lane}:`, error);
+                    // Don't fail the whole operation if one restoration fails
+                  })
+                );
+              }
+            });
+            
+            // Wait for all restorations
+            await Promise.all(restorePromises);
+            
+            // Reload available champions for all affected lanes
+            await Promise.all(Array.from(affectedLanes).map(lane => get().loadAvailableChampions(lane)));
+            
+            console.log(`Restored champions from deleted team ${timestamp}`);
+          }
           
           // Remove from local state immediately
           const updatedTeams = state.savedTeams.filter(team => team.timestamp !== timestamp);
@@ -602,6 +656,31 @@ export const useAppStore = create<AppStore>()(
           set({ playedChampions: usedChampions });
         } catch (e) {
           console.error('Failed to delete team:', e);
+          
+          // Still try to restore champions even if API delete failed
+          if (teamToDelete) {
+            try {
+              const restorePromises: Promise<void>[] = [];
+              const affectedLanes = new Set<Lane>();
+              
+              Object.entries(teamToDelete.team).forEach(([lane, champion]) => {
+                if (champion) {
+                  affectedLanes.add(lane as Lane);
+                  restorePromises.push(
+                    apiService.restoreAvailableChampion(lane as Lane, champion).catch(error => {
+                      console.error(`Failed to restore ${champion} for ${lane}:`, error);
+                    })
+                  );
+                }
+              });
+              
+              await Promise.all(restorePromises);
+              await Promise.all(Array.from(affectedLanes).map(lane => get().loadAvailableChampions(lane)));
+            } catch (restoreError) {
+              console.error('Failed to restore champions:', restoreError);
+            }
+          }
+          
           // Remove from local state anyway (optimistic update)
           const updatedTeams = state.savedTeams.filter(team => team.timestamp !== timestamp);
           set({ savedTeams: updatedTeams });
@@ -626,6 +705,29 @@ export const useAppStore = create<AppStore>()(
           team: team,
           isAdminCreated: true,
         };
+
+        // Remove champions from available for their respective lanes
+        const removePromises: Promise<void>[] = [];
+        Object.entries(team).forEach(([lane, champion]) => {
+          if (champion) {
+            removePromises.push(
+              apiService.removeAvailableChampion(lane as Lane, champion).catch(error => {
+                console.error(`Failed to remove ${champion} from available for ${lane}:`, error);
+                // Don't fail the whole operation if one removal fails
+              })
+            );
+          }
+        });
+        await Promise.all(removePromises);
+
+        // Update local available champions state
+        const updatedAvailableChampions = { ...state.availableChampions };
+        Object.entries(team).forEach(([lane, champion]) => {
+          if (champion && updatedAvailableChampions[lane as Lane]) {
+            updatedAvailableChampions[lane as Lane] = updatedAvailableChampions[lane as Lane].filter(c => c !== champion);
+          }
+        });
+        set({ availableChampions: updatedAvailableChampions });
 
         try {
           // Save to shared API
@@ -667,6 +769,29 @@ export const useAppStore = create<AppStore>()(
           ...savedTeam,
           isAdminCreated: true,
         };
+
+        // Remove champions from available for their respective lanes
+        const removePromises: Promise<void>[] = [];
+        Object.entries(adminTeam.team).forEach(([lane, champion]) => {
+          if (champion) {
+            removePromises.push(
+              apiService.removeAvailableChampion(lane as Lane, champion).catch(error => {
+                console.error(`Failed to remove ${champion} from available for ${lane}:`, error);
+                // Don't fail the whole operation if one removal fails
+              })
+            );
+          }
+        });
+        await Promise.all(removePromises);
+
+        // Update local available champions state
+        const updatedAvailableChampions = { ...state.availableChampions };
+        Object.entries(adminTeam.team).forEach(([lane, champion]) => {
+          if (champion && updatedAvailableChampions[lane as Lane]) {
+            updatedAvailableChampions[lane as Lane] = updatedAvailableChampions[lane as Lane].filter(c => c !== champion);
+          }
+        });
+        set({ availableChampions: updatedAvailableChampions });
 
         try {
           // Save to shared API
