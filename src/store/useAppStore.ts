@@ -165,44 +165,17 @@ export const useAppStore = create<AppStore>()(
         // This ensures champions from this new team are excluded from other incomplete teams
         const newCurrentTeamId = state.currentTeamId || `team-${Date.now()}`;
 
-        // Remove champion from available via API for ALL lanes it can play
-        try {
-          const championLanes = get().getChampionLanes(champion);
-          const removePromises = championLanes.map(l => 
-            apiService.removeAvailableChampion(l, champion)
-          );
-          await Promise.all(removePromises);
-          
-          // Update local state to remove champion from available list for all lanes
-          set((state) => {
-            const updatedAvailable = { ...state.availableChampions };
-            championLanes.forEach(l => {
-              if (updatedAvailable[l]) {
-                updatedAvailable[l] = updatedAvailable[l].filter(c => c !== champion);
-              }
-            });
-            return {
-              selectedChampions: {
-                ...state.selectedChampions,
-                [lane]: champion,
-              },
-              randomizedLanes: newRandomizedLanes,
-              currentTeamId: newCurrentTeamId,
-              availableChampions: updatedAvailable,
-            };
-          });
-        } catch (error) {
-          console.error(`Failed to remove champion ${champion} from available:`, error);
-          // Still update local state even if API call fails
-          set({
-            selectedChampions: {
-              ...state.selectedChampions,
-              [lane]: champion,
-            },
-            randomizedLanes: newRandomizedLanes,
-            currentTeamId: newCurrentTeamId,
-          });
-        }
+        // Only update local state - do NOT remove from database
+        // Champions are only removed from database when locked in
+        // Incomplete teams filter champions client-side only via getAvailableChampions
+        set({
+          selectedChampions: {
+            ...state.selectedChampions,
+            [lane]: champion,
+          },
+          randomizedLanes: newRandomizedLanes,
+          currentTeamId: newCurrentTeamId,
+        });
         
         // Save incomplete team when all lanes are randomized
         if (newRandomizedLanes.size === Object.keys(state.championPools).length) {
@@ -970,7 +943,6 @@ export const useAppStore = create<AppStore>()(
 
       deleteIncompleteTeam: async (id, restoreChampions = true) => {
         const state = get();
-        const teamToDelete = state.incompleteTeams.find(t => t.id === id);
         const newIncompleteTeams = state.incompleteTeams.filter(t => t.id !== id);
         
         // If the deleted team was the current one, reset currentTeamId
@@ -987,62 +959,11 @@ export const useAppStore = create<AppStore>()(
           console.error('Failed to delete incomplete team:', e);
         }
 
-        // If restoreChampions is true, restore champions from this incomplete team back to available
-        if (restoreChampions && teamToDelete) {
-          try {
-            const state = get();
-            
-            // Find all champions still in use in other teams (saved or incomplete)
-            const championsStillInUse = new Set<string>();
-            state.savedTeams.forEach(team => {
-              Object.values(team.team).forEach(champion => {
-                if (champion) {
-                  championsStillInUse.add(champion);
-                }
-              });
-            });
-            state.incompleteTeams.forEach(team => {
-              if (team.id !== id) { // Exclude the team being deleted
-                Object.values(team.team).forEach(champion => {
-                  if (champion) {
-                    championsStillInUse.add(champion);
-                  }
-                });
-              }
-            });
-            
-            // Only restore champions that are not in other teams
-            const restorePromises: Promise<void>[] = [];
-            const affectedLanes = new Set<Lane>();
-            
-            Object.values(teamToDelete.team).forEach((champion) => {
-              if (champion && !championsStillInUse.has(champion)) {
-                // Restore champion from ALL lanes it can play
-                const championLanes = get().getChampionLanes(champion);
-                championLanes.forEach(l => {
-                  affectedLanes.add(l);
-                  restorePromises.push(
-                    apiService.restoreAvailableChampion(l, champion).catch(error => {
-                      console.error(`Failed to restore ${champion} for ${l}:`, error);
-                      // Don't fail the whole operation if one restoration fails
-                    })
-                  );
-                });
-              }
-            });
-            
-            // Wait for all restorations, but don't fail if some fail
-            await Promise.all(restorePromises);
-            
-            // Reload available champions for all affected lanes
-            await Promise.all(Array.from(affectedLanes).map(lane => get().loadAvailableChampions(lane)));
-            
-            console.log(`Restored champions from deleted incomplete team ${id}`);
-          } catch (error) {
-            console.error('Failed to restore champions from incomplete team:', error);
-            // Don't throw - team is already deleted, just log the error
-          }
-        }
+        // Note: Champions in incomplete teams are never removed from the database
+        // They are only filtered client-side via getAvailableChampions
+        // So when an incomplete team is deleted, no restoration is needed
+        // The champions remain available in the database and will be visible again
+        // once the incomplete team is removed from the client-side filter
       },
 
       syncUsedChampionsFromSavedTeams: async () => {
