@@ -52,6 +52,8 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
   const [pendingDeleteTimestamp, setPendingDeleteTimestamp] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set());
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
   useEffect(() => {
     loadSavedTeams().catch(console.error);
@@ -63,6 +65,8 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
   };
 
   const handleDeleteClick = (timestamp: string) => {
+    // Clear bulk selection when doing single delete
+    setSelectedTeams(new Set());
     setPendingDeleteTimestamp(timestamp);
     setShowPasswordModal(true);
     setPassword('');
@@ -75,6 +79,18 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
       setShowPasswordModal(false);
       setError('');
       
+      // Handle bulk delete
+      if (selectedTeams.size > 0) {
+        const count = selectedTeams.size;
+        if (!confirm(`Are you sure you want to delete ${count} team${count > 1 ? 's' : ''}? This will make the champions available for randomization again.`)) {
+          setPassword('');
+          return;
+        }
+        await handleBulkDelete();
+        return;
+      }
+      
+      // Handle single delete
       if (!pendingDeleteTimestamp) return;
       
       if (!confirm('Are you sure you want to delete this team? This will make the champions available for randomization again.')) {
@@ -105,6 +121,59 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
     setPendingDeleteTimestamp(null);
     setPassword('');
     setError('');
+    // Don't clear selectedTeams here - let user keep selection if they cancel
+  };
+
+  const handleToggleSelect = (timestamp: string) => {
+    setSelectedTeams(prev => {
+      const next = new Set(prev);
+      if (next.has(timestamp)) {
+        next.delete(timestamp);
+      } else {
+        next.add(timestamp);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTeams.size === savedTeams.length) {
+      setSelectedTeams(new Set());
+    } else {
+      setSelectedTeams(new Set(savedTeams.map(team => team.timestamp)));
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    if (selectedTeams.size === 0) return;
+    setShowPasswordModal(true);
+    setPassword('');
+    setError('');
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTeams.size === 0) return;
+    
+    setIsDeletingBulk(true);
+    try {
+      // Delete all selected teams
+      const deletePromises = Array.from(selectedTeams).map(timestamp => 
+        deleteSavedTeam(timestamp).catch(error => {
+          console.error(`Failed to delete team ${timestamp}:`, error);
+          return null; // Continue with other deletions even if one fails
+        })
+      );
+      
+      await Promise.all(deletePromises);
+      setSelectedTeams(new Set());
+      setShowPasswordModal(false);
+      setPassword('');
+    } catch (error) {
+      console.error('Failed to delete teams:', error);
+      alert('Some teams failed to delete. Please try again.');
+    } finally {
+      setIsDeletingBulk(false);
+    }
   };
 
   return (
@@ -118,6 +187,32 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
           ×
         </button>
       </div>
+
+      {savedTeams.length > 0 && (
+        <div className="flex items-center justify-between mb-4 p-3 bg-slate-700 rounded-lg border border-slate-600">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selectedTeams.size === savedTeams.length && savedTeams.length > 0}
+              onChange={handleSelectAll}
+              className="w-4 h-4 text-blue-600 bg-slate-600 border-slate-500 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium">
+              Select All ({selectedTeams.size} selected)
+            </span>
+          </label>
+          {selectedTeams.size > 0 && (
+            <button
+              onClick={handleBulkDeleteClick}
+              disabled={isDeletingBulk}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded transition-colors text-sm flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              {isDeletingBulk ? 'Deleting...' : `Delete Selected (${selectedTeams.size})`}
+            </button>
+          )}
+        </div>
+      )}
 
       {savedTeams.length === 0 ? (
         <p className="text-slate-400 text-center py-8">No saved teams yet.</p>
@@ -136,12 +231,26 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
               hour12: true
             });
 
+            const isSelected = selectedTeams.has(item.timestamp);
+            
             return (
               <div
                 key={idx}
-                className="bg-slate-700 rounded-lg p-4 border border-slate-600"
+                className={`bg-slate-700 rounded-lg p-4 border transition-colors ${
+                  isSelected ? 'border-blue-500 bg-slate-650' : 'border-slate-600'
+                }`}
               >
-                <div className="font-bold mb-2">{dateStr}</div>
+                <div className="flex items-start gap-3 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleToggleSelect(item.timestamp)}
+                    className="mt-1 w-4 h-4 text-blue-600 bg-slate-600 border-slate-500 rounded focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <div className="font-bold">{dateStr}</div>
+                  </div>
+                </div>
                 <div className="text-sm text-slate-300 mb-3">
                   {Object.entries(item.team)
                     .map(([lane, champ]) => `${lane.toUpperCase()}: ${champ || '-'}`)
@@ -210,7 +319,7 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold flex items-center gap-2">
                   <Trash2 className="w-6 h-6 text-red-500" />
-                  Delete Team
+                  {selectedTeams.size > 0 ? `Delete ${selectedTeams.size} Team${selectedTeams.size > 1 ? 's' : ''}` : 'Delete Team'}
                 </h2>
                 <button
                   onClick={handlePasswordModalClose}
@@ -246,7 +355,7 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
                     type="submit"
                     className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-semibold"
                   >
-                    Delete Team
+                    {selectedTeams.size > 0 ? `Delete ${selectedTeams.size} Team${selectedTeams.size > 1 ? 's' : ''}` : 'Delete Team'}
                   </button>
                   <button
                     type="button"
