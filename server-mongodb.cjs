@@ -427,6 +427,7 @@ app.post('/api/available-champions/:lane/restore', async (req, res) => {
 });
 
 // Reset available champions for a specific lane (add all champions back)
+// Saved teams are just historical records and don't affect availability
 app.post('/api/available-champions/:lane/reset', async (req, res) => {
   try {
     const { lane } = req.params;
@@ -445,28 +446,53 @@ app.post('/api/available-champions/:lane/reset', async (req, res) => {
       return res.status(404).json({ error: `No champions found for lane: ${lane}` });
     }
     
-    // Upsert all champions for this lane, setting isAvailable to true
-    const operations = championsForLane.map(champion => ({
-      updateOne: {
-        filter: { lane, champion },
-        update: { $set: { lane, champion, isAvailable: true } },
-        upsert: true
-      }
-    }));
+    // Reset ALL champions for this lane (saved teams don't affect availability)
+    // Also reset them for ALL lanes they can play (since champions are removed from all lanes when used)
+    const operations = [];
+    championsForLane.forEach(champion => {
+      // Find all lanes this champion can play
+      roles.forEach(role => {
+        if (role.champion === champion && role.lanes && Array.isArray(role.lanes)) {
+          role.lanes.forEach(championLane => {
+            operations.push({
+              updateOne: {
+                filter: { lane: championLane, champion },
+                update: { $set: { lane: championLane, champion, isAvailable: true } },
+                upsert: true
+              }
+            });
+          });
+        }
+      });
+    });
     
     if (operations.length > 0) {
       await availableChampionsCollection.bulkWrite(operations);
     }
     
-    console.log(`POST /api/available-champions/${lane}/reset - Reset ${championsForLane.length} champions for ${lane}`);
+    console.log(`POST /api/available-champions/${lane}/reset - Reset all ${championsForLane.length} champions for ${lane}`);
     res.json({ 
-      message: `Reset ${championsForLane.length} champions for ${lane}`,
+      message: `Reset all champions for ${lane}`,
       count: championsForLane.length,
       lane 
     });
   } catch (error) {
     console.error('Error resetting available champions:', error);
     res.status(500).json({ error: 'Failed to reset available champions', message: error.message });
+  }
+});
+
+// Check if available champions collection needs initialization
+app.get('/api/available-champions/check-initialization', async (req, res) => {
+  try {
+    const count = await availableChampionsCollection.countDocuments();
+    res.json({ 
+      needsInitialization: count === 0,
+      recordCount: count 
+    });
+  } catch (error) {
+    console.error('Error checking initialization:', error);
+    res.status(500).json({ error: 'Failed to check initialization', message: error.message });
   }
 });
 

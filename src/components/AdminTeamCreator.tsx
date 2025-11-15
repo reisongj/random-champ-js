@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Lane, laneInfo } from '../data/champions';
 import { useAppStore } from '../store/useAppStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,7 +10,7 @@ interface AdminTeamCreatorProps {
 }
 
 export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
-  const { createAdminTeam, createAdminTeamFromSavedTeam, savedTeams, championPools } = useAppStore();
+  const { createAdminTeam, createAdminTeamFromSavedTeam, savedTeams, championPools, getAvailableChampions, loadAllAvailableChampions } = useAppStore();
   const [selectedChampions, setSelectedChampions] = useState<Record<Lane, string | null>>({
     top: null,
     jungle: null,
@@ -27,15 +27,10 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
   const [jsonText, setJsonText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Get champions that are already in saved teams
-  const usedChampions = new Set<string>();
-  savedTeams.forEach(team => {
-    Object.values(team.team).forEach(champion => {
-      if (champion) {
-        usedChampions.add(champion);
-      }
-    });
-  });
+  // Load available champions when component mounts
+  useEffect(() => {
+    loadAllAvailableChampions().catch(console.error);
+  }, [loadAllAvailableChampions]);
 
   const handleSelectChampion = (lane: Lane, value: string) => {
     const champion = value === '' ? null : value;
@@ -251,7 +246,8 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
       {/* Team Selection with Dropdowns */}
       <div className="space-y-4">
         {(Object.keys(championPools) as Lane[]).map((lane) => {
-          const champions = championPools[lane];
+          // Use available champions from database instead of all champions
+          const availableChampions = getAvailableChampions(lane);
           const selected = selectedChampions[lane];
           const laneColor = laneInfo[lane].color;
           const laneIcon = laneInfo[lane].icon;
@@ -264,6 +260,9 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
                 <label className="text-lg font-bold" style={{ color: laneColor }}>
                   {laneDisplay}
                 </label>
+                <span className="text-sm text-slate-400 ml-auto">
+                  ({availableChampions.length} available)
+                </span>
               </div>
               
               <select
@@ -276,23 +275,25 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
                 }}
               >
                 <option value="">-- Select Champion --</option>
-                {champions.map((champion) => {
-                  const isUsed = usedChampions.has(champion);
-                  return (
+                {availableChampions.length === 0 ? (
+                  <option disabled>No champions available</option>
+                ) : (
+                  availableChampions.map((champion) => (
                     <option
                       key={champion}
                       value={champion}
-                      disabled={isUsed}
-                      style={{ 
-                        color: isUsed ? '#64748b' : '#ffffff',
-                        textDecoration: isUsed ? 'line-through' : 'none'
-                      }}
                     >
-                      {champion} {isUsed ? '(Already in saved team)' : ''}
+                      {champion}
                     </option>
-                  );
-                })}
+                  ))
+                )}
               </select>
+              
+              {availableChampions.length === 0 && (
+                <p className="text-sm text-yellow-400 mt-2">
+                  All champions for this role have been used. Reset champions to make them available again.
+                </p>
+              )}
               
               {selected && (
                 <p className="text-sm text-slate-400 mt-2">

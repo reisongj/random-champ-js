@@ -323,6 +323,29 @@ class ApiService {
     }
   }
 
+  // Check if available champions need initialization
+  async checkNeedsInitialization(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/available-champions/check-initialization`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to check initialization: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.needsInitialization === true;
+    } catch (error) {
+      console.error(`Error checking initialization from ${this.baseUrl}:`, error);
+      // If check fails, assume initialization is needed as fallback
+      return true;
+    }
+  }
+
   // Initialize all available champions (first time setup)
   async initializeAvailableChampions(): Promise<void> {
     try {
