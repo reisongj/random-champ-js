@@ -39,7 +39,7 @@ interface AppStore {
   saveIncompleteTeam: () => void;
   loadIncompleteTeams: () => void;
   loadIncompleteTeam: (id: string) => void;
-  deleteIncompleteTeam: (id: string, restoreChampions?: boolean) => Promise<void>;
+  deleteIncompleteTeam: (id: string) => Promise<void>;
   createAdminTeam: (team: Record<Lane, string | null>) => Promise<void>; // Create a team as admin
   createAdminTeamFromSavedTeam: (savedTeam: SavedTeam) => Promise<void>; // Create a team from a SavedTeam object
   loadChampionPools: () => Promise<void>; // Load champion pools from database
@@ -296,7 +296,7 @@ export const useAppStore = create<AppStore>()(
         // Delete current incomplete team if it exists (do this immediately)
         // Don't restore champions since they're being saved to a saved team
         if (state.currentTeamId) {
-          await get().deleteIncompleteTeam(state.currentTeamId, false);
+          await get().deleteIncompleteTeam(state.currentTeamId);
         }
         
         // Add team to saved teams immediately (optimistic update)
@@ -941,7 +941,7 @@ export const useAppStore = create<AppStore>()(
         }
       },
 
-      deleteIncompleteTeam: async (id, restoreChampions = true) => {
+      deleteIncompleteTeam: async (id) => {
         const state = get();
         const newIncompleteTeams = state.incompleteTeams.filter(t => t.id !== id);
         
