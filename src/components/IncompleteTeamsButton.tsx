@@ -93,8 +93,10 @@ export default function IncompleteTeamsButton() {
                           Load
                         </button>
                         <button
-                          onClick={() => {
-                            deleteIncompleteTeam(team.id);
+                          onClick={async () => {
+                            await deleteIncompleteTeam(team.id);
+                            // Reload incomplete teams to update the list
+                            loadIncompleteTeams();
                           }}
                           className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors text-sm"
                         >

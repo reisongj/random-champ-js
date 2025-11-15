@@ -125,14 +125,13 @@ export default function Lane({ lane }: LaneProps) {
     animationIntervalRef.current = animationInterval;
   };
 
-  const handleRandomize = () => {
+  const handleRandomize = async () => {
     if (availableChampions.length === 0 || isAnimating) return;
     
-    // Call randomizeChampion first - it picks a champion and updates store synchronously
-    randomizeChampion(lane);
+    // Call randomizeChampion - it picks a champion and updates store
+    await randomizeChampion(lane);
     
     // Read the champion that was just selected from the store
-    // Zustand updates are synchronous, so we can read it immediately
     const store = useAppStore.getState();
     const finalChampion = store.selectedChampions[lane];
     

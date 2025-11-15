@@ -19,9 +19,10 @@ interface AppStore {
   currentTeamId: string | null;
   resetRoles: Set<Lane>; // Track which roles have been reset (champions in these roles are available even if in saved teams)
   championPools: Record<Lane, string[]>; // Champion pools loaded from database
+  availableChampions: Record<Lane, string[]>; // Available champions loaded from database
   
   // Actions
-  randomizeChampion: (lane: Lane) => void;
+  randomizeChampion: (lane: Lane) => Promise<void>;
   rerandomizeLane: (lane: Lane) => void;
   selectRerollChampion: (lane: Lane, champion: string) => void;
   lockInTeam: () => Promise<void>;
@@ -38,10 +39,13 @@ interface AppStore {
   saveIncompleteTeam: () => void;
   loadIncompleteTeams: () => void;
   loadIncompleteTeam: (id: string) => void;
-  deleteIncompleteTeam: (id: string) => void;
+  deleteIncompleteTeam: (id: string, restoreChampions?: boolean) => Promise<void>;
   createAdminTeam: (team: Record<Lane, string | null>) => Promise<void>; // Create a team as admin
   createAdminTeamFromSavedTeam: (savedTeam: SavedTeam) => Promise<void>; // Create a team from a SavedTeam object
   loadChampionPools: () => Promise<void>; // Load champion pools from database
+  loadAvailableChampions: (lane: Lane) => Promise<void>; // Load available champions for a lane from database
+  loadAllAvailableChampions: () => Promise<void>; // Load available champions for all lanes
+  initializeAvailableChampions: () => Promise<void>; // Initialize available champions (first time setup)
   
   // Computed
   getAvailableChampions: (lane: Lane) => string[];
@@ -78,6 +82,13 @@ export const useAppStore = create<AppStore>()(
         adc: [...defaultChampionPools.adc],
         support: [...defaultChampionPools.support],
       } as Record<Lane, string[]>,
+      availableChampions: {
+        top: [],
+        jungle: [],
+        mid: [],
+        adc: [],
+        support: [],
+      } as Record<Lane, string[]>,
 
       loadChampionPools: async () => {
         try {
@@ -98,7 +109,46 @@ export const useAppStore = create<AppStore>()(
         }
       },
 
-      randomizeChampion: (lane) => {
+      loadAvailableChampions: async (lane) => {
+        try {
+          const champions = await apiService.getAvailableChampions(lane);
+          set((state) => ({
+            availableChampions: {
+              ...state.availableChampions,
+              [lane]: champions,
+            },
+          }));
+          console.log(`Loaded ${champions.length} available champions for ${lane}`);
+        } catch (error) {
+          console.error(`Failed to load available champions for ${lane}:`, error);
+          // If API fails, fall back to using champion pools
+          const state = get();
+          set({
+            availableChampions: {
+              ...state.availableChampions,
+              [lane]: state.championPools[lane] || [],
+            },
+          });
+        }
+      },
+
+      loadAllAvailableChampions: async () => {
+        const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
+        await Promise.all(lanes.map(lane => get().loadAvailableChampions(lane)));
+      },
+
+      initializeAvailableChampions: async () => {
+        try {
+          await apiService.initializeAvailableChampions();
+          // After initialization, load all available champions
+          await get().loadAllAvailableChampions();
+          console.log('Available champions initialized and loaded');
+        } catch (error) {
+          console.error('Failed to initialize available champions:', error);
+        }
+      },
+
+      randomizeChampion: async (lane) => {
         const state = get();
         const available = state.getAvailableChampions(lane);
         
@@ -114,14 +164,34 @@ export const useAppStore = create<AppStore>()(
         // This ensures champions from this new team are excluded from other incomplete teams
         const newCurrentTeamId = state.currentTeamId || `team-${Date.now()}`;
 
-        set({
-          selectedChampions: {
-            ...state.selectedChampions,
-            [lane]: champion,
-          },
-          randomizedLanes: newRandomizedLanes,
-          currentTeamId: newCurrentTeamId,
-        });
+        // Remove champion from available via API
+        try {
+          await apiService.removeAvailableChampion(lane, champion);
+          // Update local state to remove champion from available list
+          set((state) => ({
+            selectedChampions: {
+              ...state.selectedChampions,
+              [lane]: champion,
+            },
+            randomizedLanes: newRandomizedLanes,
+            currentTeamId: newCurrentTeamId,
+            availableChampions: {
+              ...state.availableChampions,
+              [lane]: state.availableChampions[lane].filter(c => c !== champion),
+            },
+          }));
+        } catch (error) {
+          console.error(`Failed to remove champion ${champion} from available:`, error);
+          // Still update local state even if API call fails
+          set({
+            selectedChampions: {
+              ...state.selectedChampions,
+              [lane]: champion,
+            },
+            randomizedLanes: newRandomizedLanes,
+            currentTeamId: newCurrentTeamId,
+          });
+        }
         
         // Save incomplete team when all lanes are randomized
         if (newRandomizedLanes.size === Object.keys(state.championPools).length) {
@@ -240,8 +310,9 @@ export const useAppStore = create<AppStore>()(
         };
 
         // Delete current incomplete team if it exists (do this immediately)
+        // Don't restore champions since they're being saved to a saved team
         if (state.currentTeamId) {
-          get().deleteIncompleteTeam(state.currentTeamId);
+          await get().deleteIncompleteTeam(state.currentTeamId, false);
         }
         
         // Add team to saved teams immediately (optimistic update)
@@ -294,12 +365,20 @@ export const useAppStore = create<AppStore>()(
           resetRoles: new Set<Lane>(),
         });
 
-        // Delete teams from database in the background
+        // Delete teams from database and reset all available champions
         try {
           await apiService.deleteAllTeams();
           console.log('All teams deleted from database');
+          
+          // Reset all available champions for all lanes
+          const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
+          await Promise.all(lanes.map(lane => apiService.resetAvailableChampions(lane)));
+          
+          // Reload all available champions
+          await get().loadAllAvailableChampions();
+          console.log('All available champions reset');
         } catch (error) {
-          console.error('Failed to delete teams from database:', error);
+          console.error('Failed to reset champions from database:', error);
           // Don't throw - local state is already cleared, user can continue
           // The teams will be deleted on next successful reset
         }
@@ -314,32 +393,33 @@ export const useAppStore = create<AppStore>()(
           return;
         }
 
-        // Get all champions for the selected roles
-        const championsToReset = new Set<string>();
-        roles.forEach(role => {
-          state.championPools[role].forEach(champion => {
-            championsToReset.add(champion);
+        // Reset available champions for each role via API
+        try {
+          await Promise.all(roles.map(role => apiService.resetAvailableChampions(role)));
+          
+          // Reload available champions for reset roles
+          await Promise.all(roles.map(role => get().loadAvailableChampions(role)));
+          
+          // Mark these roles as reset
+          const updatedResetRoles = new Set(state.resetRoles);
+          roles.forEach(role => {
+            updatedResetRoles.add(role);
           });
-        });
 
-        // Remove champions from playedChampions for the selected roles
-        const updatedPlayedChampions = new Set(state.playedChampions);
-        championsToReset.forEach(champion => {
-          updatedPlayedChampions.delete(champion);
-        });
+          set({
+            resetRoles: updatedResetRoles,
+          });
 
-        // Mark these roles as reset so champions in saved teams become available for these roles
-        const updatedResetRoles = new Set(state.resetRoles);
-        roles.forEach(role => {
-          updatedResetRoles.add(role);
-        });
-
-        set({
-          playedChampions: updatedPlayedChampions,
-          resetRoles: updatedResetRoles,
-        });
-
-        console.log(`Reset champions for roles: ${roles.join(', ')}`);
+          console.log(`Reset champions for roles: ${roles.join(', ')}`);
+        } catch (error) {
+          console.error('Failed to reset champions via API:', error);
+          // Still update local state even if API fails
+          const updatedResetRoles = new Set(state.resetRoles);
+          roles.forEach(role => {
+            updatedResetRoles.add(role);
+          });
+          set({ resetRoles: updatedResetRoles });
+        }
       },
 
       resetForNewGame: () => {
@@ -423,13 +503,29 @@ export const useAppStore = create<AppStore>()(
             console.warn('API returned non-array response, keeping existing teams');
           }
           
-          // Sync used champions from saved teams
+          // Sync used champions from saved teams, respecting resetRoles
           try {
-            const usedChampions = await apiService.getUsedChampions();
-            const currentPlayed = get().playedChampions;
-            const combinedPlayed = new Set([...currentPlayed, ...usedChampions]);
-            set({ playedChampions: combinedPlayed });
-            console.log(`Synced ${usedChampions.size} used champions from saved teams`);
+            const currentState = get();
+            const resetRoles = currentState.resetRoles;
+            
+            // Calculate used champions from saved teams, but exclude champions from reset roles
+            // This is the source of truth for played champions from saved teams
+            const usedChampions = new Set<string>();
+            const mergedTeams = get().savedTeams;
+            
+            mergedTeams.forEach(team => {
+              Object.entries(team.team).forEach(([lane, champion]) => {
+                if (champion && !resetRoles.has(lane as Lane)) {
+                  // Only add champion if its lane hasn't been reset
+                  usedChampions.add(champion);
+                }
+              });
+            });
+            
+            // Use the calculated used champions as the source of truth
+            // This ensures reset roles are properly respected after page refresh
+            set({ playedChampions: usedChampions });
+            console.log(`Synced ${usedChampions.size} used champions from saved teams (excluding ${resetRoles.size} reset roles)`);
           } catch (champError) {
             console.error('Failed to sync used champions:', champError);
             // Don't fail the whole operation if this fails
@@ -607,20 +703,9 @@ export const useAppStore = create<AppStore>()(
 
       getAvailableChampions: (lane) => {
         const state = get();
-        const isResetRole = state.resetRoles.has(lane);
         
-        // Get all champions used in saved teams
-        const savedTeamChampions = new Set<string>();
-        if (!isResetRole) {
-          // Only exclude saved team champions if this role hasn't been reset
-          state.savedTeams.forEach(team => {
-            Object.values(team.team).forEach(champion => {
-              if (champion) {
-                savedTeamChampions.add(champion);
-              }
-            });
-          });
-        }
+        // Start with available champions from database (API-loaded)
+        let available = [...(state.availableChampions[lane] || [])];
         
         // Get all champions from incomplete teams (excluding the current team being worked on)
         const incompleteTeamChampions = new Set<string>();
@@ -635,12 +720,9 @@ export const useAppStore = create<AppStore>()(
           }
         });
         
-        // Filter out champions that are in playedChampions, in any saved team (if role not reset), or in other incomplete teams
-        return state.championPools[lane].filter(
-          (champion) => 
-            !state.playedChampions.has(champion) && 
-            !savedTeamChampions.has(champion) &&
-            !incompleteTeamChampions.has(champion)
+        // Filter out champions that are in other incomplete teams
+        return available.filter(
+          (champion) => !incompleteTeamChampions.has(champion)
         );
       },
 
@@ -739,8 +821,9 @@ export const useAppStore = create<AppStore>()(
         }
       },
 
-      deleteIncompleteTeam: (id) => {
+      deleteIncompleteTeam: async (id, restoreChampions = true) => {
         const state = get();
+        const teamToDelete = state.incompleteTeams.find(t => t.id === id);
         const newIncompleteTeams = state.incompleteTeams.filter(t => t.id !== id);
         
         // If the deleted team was the current one, reset currentTeamId
@@ -755,6 +838,38 @@ export const useAppStore = create<AppStore>()(
           localStorage.setItem('incomplete-teams', JSON.stringify(newIncompleteTeams));
         } catch (e) {
           console.error('Failed to delete incomplete team:', e);
+        }
+
+        // If restoreChampions is true, restore champions from this incomplete team back to available
+        if (restoreChampions && teamToDelete) {
+          try {
+            // Restore each champion from the incomplete team back to available
+            const restorePromises: Promise<void>[] = [];
+            const affectedLanes = new Set<Lane>();
+            
+            Object.entries(teamToDelete.team).forEach(([lane, champion]) => {
+              if (champion) {
+                affectedLanes.add(lane as Lane);
+                // Restore this specific champion back to available via API
+                restorePromises.push(
+                  apiService.restoreAvailableChampion(lane as Lane, champion).catch(error => {
+                    console.error(`Failed to restore ${champion} for ${lane}:`, error);
+                  })
+                );
+              }
+            });
+            
+            // Wait for all restorations, but don't fail if some fail
+            await Promise.all(restorePromises);
+            
+            // Reload available champions for all affected lanes
+            await Promise.all(Array.from(affectedLanes).map(lane => get().loadAvailableChampions(lane)));
+            
+            console.log(`Restored champions from deleted incomplete team ${id}`);
+          } catch (error) {
+            console.error('Failed to restore champions from incomplete team:', error);
+            // Don't throw - team is already deleted, just log the error
+          }
         }
       },
 
@@ -815,6 +930,27 @@ export const useAppStore = create<AppStore>()(
           state.loadSavedTeams();
           // Load incomplete teams
           state.loadIncompleteTeams();
+          // Initialize and load available champions
+          // First try to load, if empty then initialize
+          (async () => {
+            try {
+              await state.loadAllAvailableChampions();
+              // Check if any lane has no available champions (needs initialization)
+              const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
+              const needsInit = lanes.some(lane => (state.availableChampions[lane] || []).length === 0);
+              if (needsInit) {
+                await state.initializeAvailableChampions();
+              }
+            } catch (error) {
+              console.error('Failed to load available champions:', error);
+              // Try to initialize as fallback
+              try {
+                await state.initializeAvailableChampions();
+              } catch (initError) {
+                console.error('Failed to initialize available champions:', initError);
+              }
+            }
+          })();
         }
       },
     }

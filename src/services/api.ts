@@ -232,6 +232,118 @@ class ApiService {
       throw error;
     }
   }
+
+  // Get available champions for a specific lane
+  async getAvailableChampions(lane: string): Promise<string[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/available-champions/${lane}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch available champions: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.champions || [];
+    } catch (error) {
+      console.error(`Error fetching available champions from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
+  // Remove a champion from available (when rolled)
+  async removeAvailableChampion(lane: string, champion: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/available-champions/${lane}/remove`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ champion }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to remove champion: ${response.statusText} (${response.status})`);
+      }
+
+      await response.json();
+      console.log(`Removed ${champion} from available champions for ${lane}`);
+    } catch (error) {
+      console.error(`Error removing champion from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
+  // Restore a specific champion to available (when incomplete team is deleted)
+  async restoreAvailableChampion(lane: string, champion: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/available-champions/${lane}/restore`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ champion }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to restore champion: ${response.statusText} (${response.status})`);
+      }
+
+      await response.json();
+      console.log(`Restored ${champion} to available champions for ${lane}`);
+    } catch (error) {
+      console.error(`Error restoring champion from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
+  // Reset available champions for a specific lane
+  async resetAvailableChampions(lane: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/available-champions/${lane}/reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to reset available champions: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      console.log(`Reset ${data.count || 0} champions for ${lane}`);
+    } catch (error) {
+      console.error(`Error resetting available champions from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
+  // Initialize all available champions (first time setup)
+  async initializeAvailableChampions(): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/available-champions/initialize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to initialize available champions: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      console.log(`Initialized ${data.count || 0} champion records`);
+    } catch (error) {
+      console.error(`Error initializing available champions from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

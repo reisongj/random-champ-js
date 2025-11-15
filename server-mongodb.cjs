@@ -18,11 +18,13 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.DB_NAME || 'lol-champions';
 const COLLECTION_NAME = 'teams';
 const CHAMPION_ROLES_COLLECTION = 'champion-roles';
+const AVAILABLE_CHAMPIONS_COLLECTION = 'available-champions';
 
 let client;
 let db;
 let teamsCollection;
 let championRolesCollection;
+let availableChampionsCollection;
 
 // Connect to MongoDB
 async function connectToDatabase() {
@@ -32,6 +34,7 @@ async function connectToDatabase() {
     db = client.db(DB_NAME);
     teamsCollection = db.collection(COLLECTION_NAME);
     championRolesCollection = db.collection(CHAMPION_ROLES_COLLECTION);
+    availableChampionsCollection = db.collection(AVAILABLE_CHAMPIONS_COLLECTION);
     
     // Create index on timestamp for faster queries
     await teamsCollection.createIndex({ timestamp: -1 });
@@ -39,12 +42,17 @@ async function connectToDatabase() {
     // Create index on champion name for champion roles
     await championRolesCollection.createIndex({ champion: 1 }, { unique: true });
     
+    // Create compound index on lane and champion for available champions (unique)
+    await availableChampionsCollection.createIndex({ lane: 1, champion: 1 }, { unique: true });
+    
     // Count existing teams
     const count = await teamsCollection.countDocuments();
     const rolesCount = await championRolesCollection.countDocuments();
+    const availableCount = await availableChampionsCollection.countDocuments();
     console.log(`✓ Connected to MongoDB database: ${DB_NAME}`);
     console.log(`✓ Found ${count} existing teams in collection: ${COLLECTION_NAME}`);
     console.log(`✓ Found ${rolesCount} champion role configurations in collection: ${CHAMPION_ROLES_COLLECTION}`);
+    console.log(`✓ Found ${availableCount} available champion records in collection: ${AVAILABLE_CHAMPIONS_COLLECTION}`);
   } catch (error) {
     console.error('✗ MongoDB connection error:', error);
     console.error('  Make sure MONGODB_URI is set correctly in environment variables');
@@ -340,6 +348,166 @@ export const BASE_IMAGE_URL = "https://ddragon.leagueoflegends.com/cdn/14.22.1/i
   } catch (error) {
     console.error('Error generating champions file:', error);
     res.status(500).json({ error: 'Failed to generate file', message: error.message });
+  }
+});
+
+// Get available champions for a specific lane
+app.get('/api/available-champions/:lane', async (req, res) => {
+  try {
+    const { lane } = req.params;
+    
+    // Get all available champions for this lane (isAvailable: true)
+    const available = await availableChampionsCollection.find({ 
+      lane, 
+      isAvailable: true 
+    }).toArray();
+    
+    const champions = available.map(doc => doc.champion).sort();
+    
+    console.log(`GET /api/available-champions/${lane} - Returning ${champions.length} available champions`);
+    res.json({ champions });
+  } catch (error) {
+    console.error('Error fetching available champions:', error);
+    res.status(500).json({ error: 'Failed to fetch available champions', message: error.message });
+  }
+});
+
+// Remove a champion from available (when rolled)
+app.post('/api/available-champions/:lane/remove', async (req, res) => {
+  try {
+    const { lane } = req.params;
+    const { champion } = req.body;
+    
+    if (!champion) {
+      return res.status(400).json({ error: 'Champion name is required' });
+    }
+    
+    // Update the champion to mark as not available (soft delete)
+    const result = await availableChampionsCollection.updateOne(
+      { lane, champion },
+      { $set: { isAvailable: false } },
+      { upsert: false }
+    );
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Champion not found in available champions' });
+    }
+    
+    console.log(`POST /api/available-champions/${lane}/remove - Removed ${champion} from available`);
+    res.json({ message: 'Champion removed from available', champion, lane });
+  } catch (error) {
+    console.error('Error removing champion:', error);
+    res.status(500).json({ error: 'Failed to remove champion', message: error.message });
+  }
+});
+
+// Restore a specific champion to available (when incomplete team is deleted)
+app.post('/api/available-champions/:lane/restore', async (req, res) => {
+  try {
+    const { lane } = req.params;
+    const { champion } = req.body;
+    
+    if (!champion) {
+      return res.status(400).json({ error: 'Champion name is required' });
+    }
+    
+    // Update the champion to mark as available
+    const result = await availableChampionsCollection.updateOne(
+      { lane, champion },
+      { $set: { isAvailable: true } },
+      { upsert: true }
+    );
+    
+    console.log(`POST /api/available-champions/${lane}/restore - Restored ${champion} to available`);
+    res.json({ message: 'Champion restored to available', champion, lane });
+  } catch (error) {
+    console.error('Error restoring champion:', error);
+    res.status(500).json({ error: 'Failed to restore champion', message: error.message });
+  }
+});
+
+// Reset available champions for a specific lane (add all champions back)
+app.post('/api/available-champions/:lane/reset', async (req, res) => {
+  try {
+    const { lane } = req.params;
+    
+    // Get champion pool for this lane from champion-roles
+    const roles = await championRolesCollection.find({}).toArray();
+    const championsForLane = [];
+    
+    roles.forEach(role => {
+      if (role.lanes && Array.isArray(role.lanes) && role.lanes.includes(lane)) {
+        championsForLane.push(role.champion);
+      }
+    });
+    
+    if (championsForLane.length === 0) {
+      return res.status(404).json({ error: `No champions found for lane: ${lane}` });
+    }
+    
+    // Upsert all champions for this lane, setting isAvailable to true
+    const operations = championsForLane.map(champion => ({
+      updateOne: {
+        filter: { lane, champion },
+        update: { $set: { lane, champion, isAvailable: true } },
+        upsert: true
+      }
+    }));
+    
+    if (operations.length > 0) {
+      await availableChampionsCollection.bulkWrite(operations);
+    }
+    
+    console.log(`POST /api/available-champions/${lane}/reset - Reset ${championsForLane.length} champions for ${lane}`);
+    res.json({ 
+      message: `Reset ${championsForLane.length} champions for ${lane}`,
+      count: championsForLane.length,
+      lane 
+    });
+  } catch (error) {
+    console.error('Error resetting available champions:', error);
+    res.status(500).json({ error: 'Failed to reset available champions', message: error.message });
+  }
+});
+
+// Initialize all available champions for all lanes (first time setup)
+app.post('/api/available-champions/initialize', async (req, res) => {
+  try {
+    // Get all champion roles
+    const roles = await championRolesCollection.find({}).toArray();
+    
+    // Build operations for all lanes
+    const operations = [];
+    const lanes = ['top', 'jungle', 'mid', 'adc', 'support'];
+    
+    roles.forEach(role => {
+      if (role.lanes && Array.isArray(role.lanes)) {
+        role.lanes.forEach(lane => {
+          if (lanes.includes(lane)) {
+            operations.push({
+              updateOne: {
+                filter: { lane, champion: role.champion },
+                update: { $set: { lane, champion: role.champion, isAvailable: true } },
+                upsert: true
+              }
+            });
+          }
+        });
+      }
+    });
+    
+    if (operations.length > 0) {
+      await availableChampionsCollection.bulkWrite(operations);
+    }
+    
+    console.log(`POST /api/available-champions/initialize - Initialized ${operations.length} champion records`);
+    res.json({ 
+      message: `Initialized ${operations.length} champion records`,
+      count: operations.length 
+    });
+  } catch (error) {
+    console.error('Error initializing available champions:', error);
+    res.status(500).json({ error: 'Failed to initialize available champions', message: error.message });
   }
 });
 
