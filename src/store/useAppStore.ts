@@ -775,6 +775,7 @@ export const useAppStore = create<AppStore>()(
       partialize: (state) => ({
         playedChampions: Array.from(state.playedChampions),
         savedTeams: state.savedTeams, // Persist saved teams to localStorage
+        resetRoles: Array.from(state.resetRoles), // Persist reset roles to localStorage
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
@@ -782,6 +783,14 @@ export const useAppStore = create<AppStore>()(
           const playedArray = (state as any).playedChampions;
           if (Array.isArray(playedArray)) {
             state.playedChampions = new Set(playedArray);
+          }
+          
+          // Convert resetRoles array back to Set
+          const resetRolesArray = (state as any).resetRoles;
+          if (Array.isArray(resetRolesArray)) {
+            state.resetRoles = new Set(resetRolesArray);
+          } else if (!state.resetRoles) {
+            state.resetRoles = new Set<Lane>();
           }
           
           // Ensure savedTeams is an array (from localStorage)
