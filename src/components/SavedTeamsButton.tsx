@@ -156,18 +156,27 @@ function SavedTeamsContent({ onClose }: { onClose: () => void }) {
     
     setIsDeletingBulk(true);
     try {
-      // Delete all selected teams
-      const deletePromises = Array.from(selectedTeams).map(timestamp => 
-        deleteSavedTeam(timestamp).catch(error => {
-          console.error(`Failed to delete team ${timestamp}:`, error);
-          return null; // Continue with other deletions even if one fails
-        })
-      );
+      // Store the selected timestamps before starting deletions
+      const timestampsToDelete = Array.from(selectedTeams);
       
-      await Promise.all(deletePromises);
+      // Delete all selected teams sequentially to avoid race conditions
+      // Each deleteSavedTeam call reloads teams, so sequential is safer
+      for (const timestamp of timestampsToDelete) {
+        try {
+          await deleteSavedTeam(timestamp);
+        } catch (error) {
+          console.error(`Failed to delete team ${timestamp}:`, error);
+          // Continue with other deletions even if one fails
+        }
+      }
+      
+      // Clear selection after all deletions complete
       setSelectedTeams(new Set());
       setShowPasswordModal(false);
       setPassword('');
+      
+      // Reload teams one final time to ensure UI is up to date
+      await loadSavedTeams();
     } catch (error) {
       console.error('Failed to delete teams:', error);
       alert('Some teams failed to delete. Please try again.');
