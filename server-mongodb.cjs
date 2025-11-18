@@ -42,6 +42,57 @@ async function connectToDatabase() {
     // Create index on champion name for champion roles
     await championRolesCollection.createIndex({ champion: 1 }, { unique: true });
     
+    // Clean up duplicate champions before creating unique index
+    // This handles migration from old structure (per-lane records) to new structure (per-champion)
+    try {
+      const duplicates = await availableChampionsCollection.aggregate([
+        {
+          $group: {
+            _id: "$champion",
+            count: { $sum: 1 },
+            ids: { $push: "$_id" }
+          }
+        },
+        {
+          $match: {
+            count: { $gt: 1 }
+          }
+        }
+      ]).toArray();
+      
+      if (duplicates.length > 0) {
+        console.log(`Found ${duplicates.length} champions with duplicate records, cleaning up...`);
+        
+        for (const dup of duplicates) {
+          // Keep the first record (or one without lane field if available), delete the rest
+          const records = await availableChampionsCollection.find({ champion: dup._id }).toArray();
+          
+          // Prefer records without lane field (new structure)
+          const withoutLane = records.filter(r => !r.lane);
+          const toKeep = withoutLane.length > 0 ? withoutLane[0] : records[0];
+          const toDelete = records.filter(r => r._id.toString() !== toKeep._id.toString());
+          
+          if (toDelete.length > 0) {
+            const idsToDelete = toDelete.map(r => r._id);
+            await availableChampionsCollection.deleteMany({ _id: { $in: idsToDelete } });
+            console.log(`  Removed ${toDelete.length} duplicate record(s) for ${dup._id}`);
+          }
+        }
+      }
+    } catch (cleanupError) {
+      console.warn('Warning: Could not clean up duplicates:', cleanupError.message);
+    }
+    
+    // Drop existing index if it exists (to handle partial index creation failures)
+    try {
+      await availableChampionsCollection.dropIndex('champion_1');
+    } catch (dropError) {
+      // Index doesn't exist, which is fine
+      if (dropError.code !== 27) { // 27 = IndexNotFound
+        console.warn('Warning: Could not drop existing index:', dropError.message);
+      }
+    }
+    
     // Create unique index on champion for available champions (single record per champion)
     await availableChampionsCollection.createIndex({ champion: 1 }, { unique: true });
     
