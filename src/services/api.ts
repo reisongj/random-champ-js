@@ -367,6 +367,55 @@ class ApiService {
       throw error;
     }
   }
+
+  // Check if a champion is available for randomizer
+  async checkChampionAvailability(champion: string): Promise<{ isAvailable: boolean; lanes: string[] }> {
+    try {
+      const encodedChampion = encodeURIComponent(champion);
+      const response = await fetch(`${this.baseUrl}/available-champions/champion/${encodedChampion}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to check champion availability: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      return {
+        isAvailable: data.isAvailable === true,
+        lanes: data.lanes || [],
+      };
+    } catch (error) {
+      console.error(`Error checking champion availability from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
+  // Set a champion as unavailable for randomizer (for all lanes it can play)
+  async setChampionUnavailable(champion: string): Promise<void> {
+    try {
+      const encodedChampion = encodeURIComponent(champion);
+      const response = await fetch(`${this.baseUrl}/available-champions/champion/${encodedChampion}/set-unavailable`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to set champion as unavailable: ${response.statusText} (${response.status})`);
+      }
+
+      await response.json();
+      console.log(`Set ${champion} as unavailable for randomizer`);
+    } catch (error) {
+      console.error(`Error setting champion as unavailable from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

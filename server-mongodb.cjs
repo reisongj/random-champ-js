@@ -537,6 +537,72 @@ app.post('/api/available-champions/initialize', async (req, res) => {
   }
 });
 
+// Check if a champion is available for randomizer (checks all lanes it can play)
+app.get('/api/available-champions/champion/:champion', async (req, res) => {
+  try {
+    const { champion } = req.params;
+    
+    // Get all records for this champion across all lanes
+    const records = await availableChampionsCollection.find({ champion }).toArray();
+    
+    // Check if champion is available in at least one lane
+    const isAvailable = records.some(record => record.isAvailable === true);
+    
+    // Get the lanes this champion can play (from champion roles)
+    const role = await championRolesCollection.findOne({ champion });
+    const lanes = role && role.lanes && Array.isArray(role.lanes) ? role.lanes : [];
+    
+    console.log(`GET /api/available-champions/champion/${champion} - Available: ${isAvailable}`);
+    res.json({ 
+      champion,
+      isAvailable,
+      lanes 
+    });
+  } catch (error) {
+    console.error('Error checking champion availability:', error);
+    res.status(500).json({ error: 'Failed to check champion availability', message: error.message });
+  }
+});
+
+// Set a champion as unavailable for randomizer (sets unavailable for all lanes it can play)
+app.post('/api/available-champions/champion/:champion/set-unavailable', async (req, res) => {
+  try {
+    const { champion } = req.params;
+    
+    // Get the lanes this champion can play (from champion roles)
+    const role = await championRolesCollection.findOne({ champion });
+    if (!role || !role.lanes || !Array.isArray(role.lanes)) {
+      return res.status(404).json({ error: `Champion ${champion} not found in champion roles` });
+    }
+    
+    const lanes = role.lanes;
+    
+    // Set champion as unavailable for all lanes it can play
+    const operations = lanes.map(lane => ({
+      updateOne: {
+        filter: { lane, champion },
+        update: { $set: { lane, champion, isAvailable: false } },
+        upsert: true
+      }
+    }));
+    
+    if (operations.length > 0) {
+      await availableChampionsCollection.bulkWrite(operations);
+    }
+    
+    console.log(`POST /api/available-champions/champion/${champion}/set-unavailable - Set unavailable for ${lanes.length} lanes`);
+    res.json({ 
+      message: `Champion ${champion} set as unavailable for randomizer`,
+      champion,
+      lanes,
+      count: lanes.length 
+    });
+  } catch (error) {
+    console.error('Error setting champion as unavailable:', error);
+    res.status(500).json({ error: 'Failed to set champion as unavailable', message: error.message });
+  }
+});
+
 // Graceful shutdown
 async function shutdown() {
   console.log('\nShutting down gracefully...');
