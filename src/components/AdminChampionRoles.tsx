@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lane, laneInfo, championPools } from '../data/champions';
 import { apiService } from '../services/api';
 import { motion } from 'framer-motion';
-import { Save, Search, CheckCircle2, XCircle, Ban } from 'lucide-react';
+import { Save, Search, CheckCircle2, XCircle } from 'lucide-react';
 
 interface AdminChampionRolesProps {
   onClose?: () => void;
@@ -28,9 +28,6 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveErrorMessage, setSaveErrorMessage] = useState<string>('');
-  const [championAvailability, setChampionAvailability] = useState<Record<string, boolean>>({});
-  const [loadingAvailability, setLoadingAvailability] = useState<Record<string, boolean>>({});
-  const [settingUnavailable, setSettingUnavailable] = useState<Record<string, boolean>>({});
 
   const allChampions = getAllChampions();
   const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
@@ -273,26 +270,12 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
           ) : (
             filteredChampions.map((champion) => {
               const roles = championRoles[champion] || [];
-              const isAvailable = championAvailability[champion] ?? true;
-              const isLoadingAvail = loadingAvailability[champion] ?? false;
-              const isSettingUnavail = settingUnavailable[champion] ?? false;
               return (
                 <div
                   key={champion}
                   className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-600/50 hover:border-slate-500 transition-colors"
                 >
-                  <div className="font-semibold text-white min-w-[180px] flex items-center gap-2">
-                    {champion}
-                    {!isLoadingAvail && (
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        isAvailable 
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' 
-                          : 'bg-red-500/20 text-red-400 border border-red-500/50'
-                      }`}>
-                        {isAvailable ? 'Available' : 'Unavailable'}
-                      </span>
-                    )}
-                  </div>
+                  <div className="font-semibold text-white min-w-[180px]">{champion}</div>
                   <div className="flex flex-wrap gap-2 flex-1">
                     {lanes.map((lane) => {
                       const isSelected = roles.includes(lane);
@@ -316,23 +299,6 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
                       );
                     })}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {isAvailable && (
-                      <button
-                        onClick={() => handleSetUnavailable(champion)}
-                        disabled={isSettingUnavail}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-                          isSettingUnavail
-                            ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                            : 'bg-red-600 hover:bg-red-700 text-white'
-                        }`}
-                        title="Set champion as unavailable for randomizer"
-                      >
-                        <Ban className="w-4 h-4" />
-                        {isSettingUnavail ? 'Setting...' : 'Set Unavailable'}
-                      </button>
-                    )}
-                  </div>
                 </div>
               );
             })
@@ -341,9 +307,8 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
       </div>
 
       {/* Info */}
-      <div className="text-sm text-slate-400 bg-slate-800/50 border border-slate-700 rounded-lg p-3 space-y-2">
+      <div className="text-sm text-slate-400 bg-slate-800/50 border border-slate-700 rounded-lg p-3">
         <p>💡 Click on role buttons to toggle which lanes each champion can play. Changes are saved to the database and can be used to generate the champions.ts file.</p>
-        <p>🚫 Use the "Set Unavailable" button to mark a champion as unavailable for the randomizer. The champion will remain unavailable until the role is reset.</p>
       </div>
     </div>
   );
