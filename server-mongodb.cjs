@@ -42,8 +42,8 @@ async function connectToDatabase() {
     // Create index on champion name for champion roles
     await championRolesCollection.createIndex({ champion: 1 }, { unique: true });
     
-    // Create compound index on lane and champion for available champions (unique)
-    await availableChampionsCollection.createIndex({ lane: 1, champion: 1 }, { unique: true });
+    // Create unique index on champion for available champions (single record per champion)
+    await availableChampionsCollection.createIndex({ champion: 1 }, { unique: true });
     
     // Count existing teams
     const count = await teamsCollection.countDocuments();
@@ -351,6 +351,136 @@ export const BASE_IMAGE_URL = "https://ddragon.leagueoflegends.com/cdn/14.22.1/i
   }
 });
 
+// Get all champion availability records at once (for admin panel)
+// NOTE: This route must be defined BEFORE /api/available-champions/:lane to avoid route conflicts
+app.get('/api/available-champions/all', async (req, res) => {
+  try {
+    // Get all records from available-champions collection
+    const records = await availableChampionsCollection.find({}).toArray();
+    
+    console.log(`GET /api/available-champions/all - Found ${records.length} total records in collection`);
+    
+    // Log all records for debugging
+    if (records.length > 0) {
+      console.log('Sample records (first 5):', records.slice(0, 5).map(r => ({
+        champion: r.champion,
+        lane: r.lane,
+        isAvailable: r.isAvailable,
+        _id: r._id
+      })));
+    }
+    
+    // Convert to a map: champion -> isAvailable
+    const availabilityMap = {};
+    let recordsWithChampion = 0;
+    let recordsWithoutChampion = 0;
+    
+    records.forEach(record => {
+      if (record.champion) {
+        recordsWithChampion++;
+        // If record exists: isAvailable = false means unavailable, isAvailable = true means available
+        // If isAvailable is undefined/null, treat as unavailable (false) since record exists
+        const isAvailable = record.isAvailable === true;
+        
+        // If champion already exists in map, keep the most restrictive (false wins)
+        // This handles cases where a champion might have multiple records (old format with lanes)
+        if (availabilityMap[record.champion] === undefined || !isAvailable) {
+          availabilityMap[record.champion] = isAvailable;
+        }
+        
+        // Log Ambessa specifically for debugging
+        if (record.champion === 'Ambessa') {
+          console.log(`Ambessa record found: isAvailable=${record.isAvailable}, type=${typeof record.isAvailable}, final=${isAvailable}, full record:`, JSON.stringify(record));
+        }
+      } else {
+        recordsWithoutChampion++;
+        // Log records without champion field for debugging
+        console.log('Record without champion field:', JSON.stringify(record));
+      }
+    });
+    
+    console.log(`Records with champion field: ${recordsWithChampion}, Records without champion field: ${recordsWithoutChampion}`);
+    
+    // Log Ambessa's final status
+    if (availabilityMap['Ambessa'] !== undefined) {
+      console.log(`Ambessa in availabilityMap: ${availabilityMap['Ambessa']}`);
+    } else {
+      console.log('Ambessa NOT in availabilityMap (will default to available)');
+    }
+    
+    console.log(`GET /api/available-champions/all - Returning availability for ${Object.keys(availabilityMap).length} champions`);
+    res.json({ availability: availabilityMap });
+  } catch (error) {
+    console.error('Error fetching all champion availability:', error);
+    res.status(500).json({ error: 'Failed to fetch all champion availability', message: error.message });
+  }
+});
+
+// Check if a champion is available for randomizer
+// NOTE: This route must be defined BEFORE /api/available-champions/:lane to avoid route conflicts
+app.get('/api/available-champions/champion/:champion', async (req, res) => {
+  try {
+    const { champion } = req.params;
+    
+    // Query ONLY the available-champions table - should be 1 record per champion
+    // Find any record for this champion (with or without lane field for backwards compatibility)
+    const record = await availableChampionsCollection.findOne({ champion });
+    
+    // Get the lanes this champion can play (from champion roles) for reference only
+    const role = await championRolesCollection.findOne({ champion });
+    const lanes = role && role.lanes && Array.isArray(role.lanes) ? role.lanes : [];
+    
+    // Determine availability based ONLY on available-champions table
+    // If record exists: isAvailable = false means unavailable, isAvailable = true means available
+    // If no record exists: default to available (champion hasn't been explicitly set as unavailable)
+    const isAvailable = record ? (record.isAvailable === true) : true;
+    
+    console.log(`GET /api/available-champions/champion/${champion} - Available: ${isAvailable}, Record found: ${!!record}, isAvailable value: ${record ? record.isAvailable : 'N/A'}, Full record: ${JSON.stringify(record)}`);
+    res.json({ 
+      champion,
+      isAvailable,
+      lanes 
+    });
+  } catch (error) {
+    console.error('Error checking champion availability:', error);
+    res.status(500).json({ error: 'Failed to check champion availability', message: error.message });
+  }
+});
+
+// Set a champion as unavailable for randomizer
+// NOTE: This route must be defined BEFORE /api/available-champions/:lane to avoid route conflicts
+app.post('/api/available-champions/champion/:champion/set-unavailable', async (req, res) => {
+  try {
+    const { champion } = req.params;
+    
+    // Verify champion exists in champion roles
+    const role = await championRolesCollection.findOne({ champion });
+    if (!role || !role.lanes || !Array.isArray(role.lanes)) {
+      return res.status(404).json({ error: `Champion ${champion} not found in champion roles` });
+    }
+    
+    const lanes = role.lanes;
+    
+    // Set champion as unavailable - single record per champion (no lane field)
+    // Remove lane field if it exists (migration from old structure)
+    const result = await availableChampionsCollection.updateOne(
+      { champion },
+      { $set: { champion, isAvailable: false }, $unset: { lane: "" } },
+      { upsert: true }
+    );
+    
+    console.log(`POST /api/available-champions/champion/${champion}/set-unavailable - Set unavailable (can play ${lanes.length} lanes)`);
+    res.json({ 
+      message: `Champion ${champion} set as unavailable for randomizer`,
+      champion,
+      lanes
+    });
+  } catch (error) {
+    console.error('Error setting champion as unavailable:', error);
+    res.status(500).json({ error: 'Failed to set champion as unavailable', message: error.message });
+  }
+});
+
 // Get available champions for a specific lane
 app.get('/api/available-champions/:lane', async (req, res) => {
   try {
@@ -534,68 +664,6 @@ app.post('/api/available-champions/initialize', async (req, res) => {
   } catch (error) {
     console.error('Error initializing available champions:', error);
     res.status(500).json({ error: 'Failed to initialize available champions', message: error.message });
-  }
-});
-
-// Check if a champion is available for randomizer
-app.get('/api/available-champions/champion/:champion', async (req, res) => {
-  try {
-    const { champion } = req.params;
-    
-    // Query ONLY the available-champions table - should be 1 record per champion
-    // Structure: { champion: "Ambessa", isAvailable: true/false }
-    const record = await availableChampionsCollection.findOne({ champion });
-    
-    // Get the lanes this champion can play (from champion roles) for reference only
-    const role = await championRolesCollection.findOne({ champion });
-    const lanes = role && role.lanes && Array.isArray(role.lanes) ? role.lanes : [];
-    
-    // Determine availability based ONLY on available-champions table
-    // If record exists: isAvailable = false means unavailable, isAvailable = true means available
-    // If no record exists: default to available (champion hasn't been explicitly set as unavailable)
-    const isAvailable = record ? record.isAvailable === true : true;
-    
-    console.log(`GET /api/available-champions/champion/${champion} - Available: ${isAvailable} (record: ${record ? `isAvailable=${record.isAvailable}` : 'none'})`);
-    res.json({ 
-      champion,
-      isAvailable,
-      lanes 
-    });
-  } catch (error) {
-    console.error('Error checking champion availability:', error);
-    res.status(500).json({ error: 'Failed to check champion availability', message: error.message });
-  }
-});
-
-// Set a champion as unavailable for randomizer
-app.post('/api/available-champions/champion/:champion/set-unavailable', async (req, res) => {
-  try {
-    const { champion } = req.params;
-    
-    // Verify champion exists in champion roles
-    const role = await championRolesCollection.findOne({ champion });
-    if (!role || !role.lanes || !Array.isArray(role.lanes)) {
-      return res.status(404).json({ error: `Champion ${champion} not found in champion roles` });
-    }
-    
-    const lanes = role.lanes;
-    
-    // Set champion as unavailable - single record per champion (no lane field)
-    const result = await availableChampionsCollection.updateOne(
-      { champion },
-      { $set: { champion, isAvailable: false } },
-      { upsert: true }
-    );
-    
-    console.log(`POST /api/available-champions/champion/${champion}/set-unavailable - Set unavailable (can play ${lanes.length} lanes)`);
-    res.json({ 
-      message: `Champion ${champion} set as unavailable for randomizer`,
-      champion,
-      lanes
-    });
-  } catch (error) {
-    console.error('Error setting champion as unavailable:', error);
-    res.status(500).json({ error: 'Failed to set champion as unavailable', message: error.message });
   }
 });
 

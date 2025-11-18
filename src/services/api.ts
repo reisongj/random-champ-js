@@ -368,6 +368,31 @@ class ApiService {
     }
   }
 
+  // Get all champion availability records at once (for admin panel)
+  async getAllChampionAvailability(): Promise<Record<string, boolean>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/available-champions/all`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get all champion availability: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      console.log('API Response from /available-champions/all:', data);
+      console.log('Availability map:', data.availability);
+      console.log('Ambessa in response:', data.availability?.Ambessa);
+      return data.availability || {};
+    } catch (error) {
+      console.error(`Error getting all champion availability from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
   // Check if a champion is available for randomizer
   async checkChampionAvailability(champion: string): Promise<{ isAvailable: boolean; lanes: string[] }> {
     try {

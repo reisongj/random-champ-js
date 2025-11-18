@@ -60,7 +60,7 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
     loadChampionRoles();
   }, []);
 
-  // Load availability status for all champions
+  // Load availability when panel opens and when champion roles finish loading
   useEffect(() => {
     if (!isLoading && allChampions.length > 0) {
       loadAllChampionAvailability();
@@ -98,40 +98,48 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
   };
 
   const loadAllChampionAvailability = async () => {
-    const availability: Record<string, boolean> = {};
-    const loading: Record<string, boolean> = {};
-    
-    // Initialize all as loading
-    allChampions.forEach(champion => {
-      loading[champion] = true;
-    });
-    setLoadingAvailability(loading);
+    try {
+      // Initialize all as loading
+      const loading: Record<string, boolean> = {};
+      allChampions.forEach(champion => {
+        loading[champion] = true;
+      });
+      setLoadingAvailability(loading);
 
-    // Load availability for all champions in parallel
-    const promises = allChampions.map(async (champion) => {
-      try {
-        const result = await apiService.checkChampionAvailability(champion);
-        availability[champion] = result.isAvailable;
-      } catch (error) {
-        console.error(`Failed to load availability for ${champion}:`, error);
-        // Default to available if check fails
+      // Load all availability records at once from the backend
+      const availabilityMap = await apiService.getAllChampionAvailability();
+      
+      // Build availability object for all champions
+      // Champions not in the map default to available (true)
+      const availability: Record<string, boolean> = {};
+      allChampions.forEach(champion => {
+        // If champion has a record, use its isAvailable value
+        // If no record exists, default to available (true)
+        availability[champion] = availabilityMap[champion] ?? true;
+      });
+
+      setChampionAvailability(availability);
+      setLoadingAvailability({});
+    } catch (error) {
+      console.error('Failed to load all champion availability:', error);
+      // On error, default all champions to available
+      const availability: Record<string, boolean> = {};
+      allChampions.forEach(champion => {
         availability[champion] = true;
-      } finally {
-        loading[champion] = false;
-      }
-    });
-
-    await Promise.all(promises);
-    setChampionAvailability(availability);
-    setLoadingAvailability({});
+      });
+      setChampionAvailability(availability);
+      setLoadingAvailability({});
+    }
   };
 
   const handleSetUnavailable = async (champion: string) => {
     try {
       setSettingUnavailable(prev => ({ ...prev, [champion]: true }));
       await apiService.setChampionUnavailable(champion);
-      // Update local state
-      setChampionAvailability(prev => ({ ...prev, [champion]: false }));
+      
+      // Reload all availability from server to ensure we have the correct values
+      await loadAllChampionAvailability();
+      
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
