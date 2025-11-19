@@ -605,16 +605,58 @@ app.get('/api/available-champions/:lane', async (req, res) => {
   try {
     const { lane } = req.params;
     
-    // Get all available champions for this lane (isAvailable: true)
-    const available = await availableChampionsCollection.find({ 
-      lane, 
-      isAvailable: true 
+    // Get all champions that can play this lane from champion roles
+    const roles = await championRolesCollection.find({}).toArray();
+    const championsForLane = roles
+      .filter(role => role.lanes && Array.isArray(role.lanes) && role.lanes.includes(lane))
+      .map(role => role.champion);
+    
+    if (championsForLane.length === 0) {
+      return res.json({ champions: [] });
+    }
+    
+    // Get availability status for all champions (new structure: one record per champion, no lane field)
+    // Also check old structure for backwards compatibility
+    // We need to get ALL records (both available and unavailable) to determine status
+    const availabilityRecords = await availableChampionsCollection.find({
+      $or: [
+        { champion: { $in: championsForLane } }, // New structure (no lane field) - get all records
+        { lane, champion: { $in: championsForLane } } // Old structure (with lane field) - get all records
+      ]
     }).toArray();
     
-    const champions = available.map(doc => doc.champion).sort();
+    // Create a map of champion -> availability status
+    const availabilityMap = new Map();
     
-    console.log(`GET /api/available-champions/${lane} - Returning ${champions.length} available champions`);
-    res.json({ champions });
+    // First, process new structure records (no lane field) - these take precedence
+    availabilityRecords.forEach(record => {
+      if (!record.lane) {
+        // New structure: one record per champion
+        // isAvailable: true means available, isAvailable: false means unavailable
+        availabilityMap.set(record.champion, record.isAvailable === true);
+      }
+    });
+    
+    // Then, process old structure records (with lane field) for champions not in new structure
+    availabilityRecords.forEach(record => {
+      if (record.lane && !availabilityMap.has(record.champion)) {
+        // Old structure: only if champion not already in map
+        if (record.lane === lane) {
+          availabilityMap.set(record.champion, record.isAvailable === true);
+        }
+      }
+    });
+    
+    // Filter champions: available if explicitly set as available (true), or if no record exists (defaults to available)
+    const availableChampions = championsForLane.filter(champion => {
+      const availability = availabilityMap.get(champion);
+      // If no record exists, default to available (true)
+      // If record exists, only include if isAvailable is explicitly true
+      return availability === undefined || availability === true;
+    }).sort();
+    
+    console.log(`GET /api/available-champions/${lane} - Returning ${availableChampions.length} available champions out of ${championsForLane.length} total`);
+    res.json({ champions: availableChampions });
   } catch (error) {
     console.error('Error fetching available champions:', error);
     res.status(500).json({ error: 'Failed to fetch available champions', message: error.message });
