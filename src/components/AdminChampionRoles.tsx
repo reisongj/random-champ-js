@@ -28,6 +28,16 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveErrorMessage, setSaveErrorMessage] = useState<string>('');
+  // Initialize availability to all true by default so champions show up immediately
+  const [championAvailability, setChampionAvailability] = useState<Record<string, boolean>>(() => {
+    const defaultAvailability: Record<string, boolean> = {};
+    getAllChampions().forEach(champion => {
+      defaultAvailability[champion] = true;
+    });
+    return defaultAvailability;
+  });
+  const [loadingAvailability, setLoadingAvailability] = useState<Record<string, boolean>>({});
+  const [settingUnavailable, setSettingUnavailable] = useState<Record<string, boolean>>({});
 
   const allChampions = getAllChampions();
   const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
@@ -52,17 +62,16 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
     return initialRoles;
   };
 
-  // Load champion roles from API
+  // Load champion roles and availability in parallel on mount
   useEffect(() => {
-    loadChampionRoles();
+    // Load both in parallel for better performance
+    Promise.all([
+      loadChampionRoles(),
+      loadAllChampionAvailability()
+    ]).catch(error => {
+      console.error('Error loading initial data:', error);
+    });
   }, []);
-
-  // Load availability when panel opens and when champion roles finish loading
-  useEffect(() => {
-    if (!isLoading && allChampions.length > 0) {
-      loadAllChampionAvailability();
-    }
-  }, [isLoading, allChampions.length]);
 
   const loadChampionRoles = async () => {
     try {
@@ -96,42 +105,30 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
 
   const loadAllChampionAvailability = async () => {
     try {
-      // Initialize all as loading
-      const loading: Record<string, boolean> = {};
-      allChampions.forEach(champion => {
-        loading[champion] = true;
-      });
-      setLoadingAvailability(loading);
-
       // Load all availability records at once from the backend
       const availabilityMap = await apiService.getAllChampionAvailability();
       
-      // Build availability object for all champions
+      // Update availability state with data from backend
       // Champions not in the map default to available (true)
-      const availability: Record<string, boolean> = {};
-      allChampions.forEach(champion => {
-        // If champion has a record, use its isAvailable value
-        // If no record exists, default to available (true)
-        availability[champion] = availabilityMap[champion] ?? true;
+      setChampionAvailability(prev => {
+        const updated: Record<string, boolean> = {};
+        allChampions.forEach(champion => {
+          // If champion has a record, use its isAvailable value
+          // If no record exists, default to available (true)
+          updated[champion] = availabilityMap[champion] ?? true;
+        });
+        return updated;
       });
-
-      setChampionAvailability(availability);
-      setLoadingAvailability({});
     } catch (error) {
       console.error('Failed to load all champion availability:', error);
-      // On error, default all champions to available
-      const availability: Record<string, boolean> = {};
-      allChampions.forEach(champion => {
-        availability[champion] = true;
-      });
-      setChampionAvailability(availability);
-      setLoadingAvailability({});
+      // On error, keep existing availability (defaults to all true)
+      // Don't update state to avoid flickering
     }
   };
 
   const handleSetUnavailable = async (champion: string) => {
     try {
-      setSettingUnavailable(prev => ({ ...prev, [champion]: true }));
+      setSettingUnavailable((prev: Record<string, boolean>) => ({ ...prev, [champion]: true }));
       await apiService.setChampionUnavailable(champion);
       
       // Reload all availability from server to ensure we have the correct values
@@ -145,7 +142,7 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
       setSaveErrorMessage(`Failed to set ${champion} as unavailable: ${errorMessage}`);
       setSaveStatus('error');
     } finally {
-      setSettingUnavailable(prev => ({ ...prev, [champion]: false }));
+      setSettingUnavailable((prev: Record<string, boolean>) => ({ ...prev, [champion]: false }));
     }
   };
 
