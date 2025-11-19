@@ -29,15 +29,16 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveErrorMessage, setSaveErrorMessage] = useState<string>('');
   // Initialize availability to all true by default so champions show up immediately
-  const [championAvailability, setChampionAvailability] = useState<Record<string, boolean>>(() => {
+  // Prefixed with underscore as it's loaded but not yet used in UI (for future features)
+  const [_championAvailability, setChampionAvailability] = useState<Record<string, boolean>>(() => {
     const defaultAvailability: Record<string, boolean> = {};
     getAllChampions().forEach(champion => {
       defaultAvailability[champion] = true;
     });
     return defaultAvailability;
   });
-  const [loadingAvailability, setLoadingAvailability] = useState<Record<string, boolean>>({});
-  const [settingUnavailable, setSettingUnavailable] = useState<Record<string, boolean>>({});
+  // Prefixed with underscore as these are for future availability management features
+  const [_settingUnavailable, setSettingUnavailable] = useState<Record<string, boolean>>({});
 
   const allChampions = getAllChampions();
   const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
@@ -110,15 +111,13 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
       
       // Update availability state with data from backend
       // Champions not in the map default to available (true)
-      setChampionAvailability(prev => {
-        const updated: Record<string, boolean> = {};
-        allChampions.forEach(champion => {
-          // If champion has a record, use its isAvailable value
-          // If no record exists, default to available (true)
-          updated[champion] = availabilityMap[champion] ?? true;
-        });
-        return updated;
+      const updated: Record<string, boolean> = {};
+      allChampions.forEach(champion => {
+        // If champion has a record, use its isAvailable value
+        // If no record exists, default to available (true)
+        updated[champion] = availabilityMap[champion] ?? true;
       });
+      setChampionAvailability(updated);
     } catch (error) {
       console.error('Failed to load all champion availability:', error);
       // On error, keep existing availability (defaults to all true)
@@ -126,7 +125,9 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
     }
   };
 
-  const handleSetUnavailable = async (champion: string) => {
+  // Prefixed with underscore as this function is for future availability management features
+  // @ts-expect-error - Intentionally unused, reserved for future UI features
+  const _handleSetUnavailable = async (champion: string) => {
     try {
       setSettingUnavailable((prev: Record<string, boolean>) => ({ ...prev, [champion]: true }));
       await apiService.setChampionUnavailable(champion);
