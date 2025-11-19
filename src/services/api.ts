@@ -441,6 +441,29 @@ class ApiService {
       throw error;
     }
   }
+
+  // Set a champion as available for randomizer (for all lanes it can play)
+  async setChampionAvailable(champion: string): Promise<void> {
+    try {
+      const encodedChampion = encodeURIComponent(champion);
+      const response = await fetch(`${this.baseUrl}/available-champions/champion/${encodedChampion}/set-available`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to set champion as available: ${response.statusText} (${response.status})`);
+      }
+
+      await response.json();
+      console.log(`Set ${champion} as available for randomizer`);
+    } catch (error) {
+      console.error(`Error setting champion as available from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

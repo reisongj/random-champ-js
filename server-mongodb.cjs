@@ -502,15 +502,22 @@ app.get('/api/available-champions/champion/:champion', async (req, res) => {
 // NOTE: This route must be defined BEFORE /api/available-champions/:lane to avoid route conflicts
 app.post('/api/available-champions/champion/:champion/set-unavailable', async (req, res) => {
   try {
-    const { champion } = req.params;
+    // Decode the champion name from URL
+    const champion = decodeURIComponent(req.params.champion);
     
-    // Verify champion exists in champion roles
-    const role = await championRolesCollection.findOne({ champion });
-    if (!role || !role.lanes || !Array.isArray(role.lanes)) {
-      return res.status(404).json({ error: `Champion ${champion} not found in champion roles` });
+    // Verify champion exists in champion roles, or allow update anyway
+    let role = await championRolesCollection.findOne({ champion });
+    let lanes = [];
+    
+    if (!role) {
+      // Champion doesn't have a role entry yet - still allow setting availability
+      console.log(`Champion ${champion} not found in champion roles - allowing availability update anyway`);
+    } else if (!role.lanes || !Array.isArray(role.lanes)) {
+      console.log(`Champion ${champion} found but has no valid lanes`);
+      // Still allow the update, just use empty lanes
+    } else {
+      lanes = role.lanes;
     }
-    
-    const lanes = role.lanes;
     
     // Set champion as unavailable - single record per champion (no lane field)
     // Remove lane field if it exists (migration from old structure)
@@ -529,6 +536,67 @@ app.post('/api/available-champions/champion/:champion/set-unavailable', async (r
   } catch (error) {
     console.error('Error setting champion as unavailable:', error);
     res.status(500).json({ error: 'Failed to set champion as unavailable', message: error.message });
+  }
+});
+
+// Set a champion as available for randomizer
+// NOTE: This route must be defined BEFORE /api/available-champions/:lane to avoid route conflicts
+app.post('/api/available-champions/champion/:champion/set-available', async (req, res) => {
+  try {
+    // Decode the champion name from URL
+    const champion = decodeURIComponent(req.params.champion);
+    
+    console.log(`POST /api/available-champions/champion/${champion}/set-available - Decoded champion: ${champion}`);
+    
+    // Verify champion exists in champion roles, or create a default entry
+    let role = await championRolesCollection.findOne({ champion });
+    if (!role) {
+      // Champion doesn't have a role entry yet - this can happen for new champions
+      // We'll still allow setting availability, but we need to handle this case
+      console.log(`Champion ${champion} not found in champion roles - allowing availability update anyway`);
+      // We can still set availability even without a role entry
+      // The lanes will be empty, but that's okay for availability management
+      const lanes = [];
+      
+      // Set champion as available - single record per champion (no lane field)
+      const result = await availableChampionsCollection.updateOne(
+        { champion },
+        { $set: { champion, isAvailable: true }, $unset: { lane: "" } },
+        { upsert: true }
+      );
+      
+      console.log(`POST /api/available-champions/champion/${champion}/set-available - Set available (no role entry yet)`);
+      return res.json({ 
+        message: `Champion ${champion} set as available for randomizer`,
+        champion,
+        lanes: []
+      });
+    }
+    
+    if (!role.lanes || !Array.isArray(role.lanes)) {
+      console.log(`Champion ${champion} found but has no valid lanes`);
+      return res.status(404).json({ error: `Champion ${champion} has no valid lanes configured` });
+    }
+    
+    const lanes = role.lanes;
+    
+    // Set champion as available - single record per champion (no lane field)
+    // Remove lane field if it exists (migration from old structure)
+    const result = await availableChampionsCollection.updateOne(
+      { champion },
+      { $set: { champion, isAvailable: true }, $unset: { lane: "" } },
+      { upsert: true }
+    );
+    
+    console.log(`POST /api/available-champions/champion/${champion}/set-available - Set available (can play ${lanes.length} lanes)`);
+    res.json({ 
+      message: `Champion ${champion} set as available for randomizer`,
+      champion,
+      lanes
+    });
+  } catch (error) {
+    console.error('Error setting champion as available:', error);
+    res.status(500).json({ error: 'Failed to set champion as available', message: error.message });
   }
 });
 

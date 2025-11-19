@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lane, laneInfo, championPools } from '../data/champions';
 import { apiService } from '../services/api';
 import { motion } from 'framer-motion';
-import { Save, Search, CheckCircle2, XCircle } from 'lucide-react';
+import { Save, Search, CheckCircle2, XCircle, Check, X } from 'lucide-react';
 
 interface AdminChampionRolesProps {
   onClose?: () => void;
@@ -29,16 +29,14 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveErrorMessage, setSaveErrorMessage] = useState<string>('');
   // Initialize availability to all true by default so champions show up immediately
-  // Prefixed with underscore as it's loaded but not yet used in UI (for future features)
-  const [_championAvailability, setChampionAvailability] = useState<Record<string, boolean>>(() => {
+  const [championAvailability, setChampionAvailability] = useState<Record<string, boolean>>(() => {
     const defaultAvailability: Record<string, boolean> = {};
     getAllChampions().forEach(champion => {
       defaultAvailability[champion] = true;
     });
     return defaultAvailability;
   });
-  // Prefixed with underscore as these are for future availability management features
-  const [_settingUnavailable, setSettingUnavailable] = useState<Record<string, boolean>>({});
+  const [settingAvailability, setSettingAvailability] = useState<Record<string, boolean>>({});
 
   const allChampions = getAllChampions();
   const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
@@ -125,25 +123,38 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
     }
   };
 
-  // Prefixed with underscore as this function is for future availability management features
-  // @ts-expect-error - Intentionally unused, reserved for future UI features
-  const _handleSetUnavailable = async (champion: string) => {
+  const toggleChampionAvailability = async (champion: string) => {
+    const isCurrentlyAvailable = championAvailability[champion] ?? true;
+    const newAvailability = !isCurrentlyAvailable;
+    
     try {
-      setSettingUnavailable((prev: Record<string, boolean>) => ({ ...prev, [champion]: true }));
-      await apiService.setChampionUnavailable(champion);
+      setSettingAvailability((prev: Record<string, boolean>) => ({ ...prev, [champion]: true }));
       
-      // Reload all availability from server to ensure we have the correct values
-      await loadAllChampionAvailability();
+      // Update local state immediately for better UX
+      setChampionAvailability(prev => ({ ...prev, [champion]: newAvailability }));
+      
+      if (newAvailability) {
+        // Set champion as available
+        await apiService.setChampionAvailable(champion);
+      } else {
+        // Set champion as unavailable
+        await apiService.setChampionUnavailable(champion);
+      }
+      
+      // Don't reload immediately - the optimistic update is already in place
+      // The state will be correct on next page load or manual refresh
       
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
-      console.error(`Failed to set ${champion} as unavailable:`, error);
+      console.error(`Failed to toggle availability for ${champion}:`, error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setSaveErrorMessage(`Failed to set ${champion} as unavailable: ${errorMessage}`);
+      setSaveErrorMessage(`Failed to toggle availability for ${champion}: ${errorMessage}`);
       setSaveStatus('error');
+      // Revert local state on error
+      setChampionAvailability(prev => ({ ...prev, [champion]: isCurrentlyAvailable }));
     } finally {
-      setSettingUnavailable((prev: Record<string, boolean>) => ({ ...prev, [champion]: false }));
+      setSettingAvailability((prev: Record<string, boolean>) => ({ ...prev, [champion]: false }));
     }
   };
 
@@ -268,12 +279,36 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
           ) : (
             filteredChampions.map((champion) => {
               const roles = championRoles[champion] || [];
+              const isAvailable = championAvailability[champion] ?? true;
+              const isSetting = settingAvailability[champion] ?? false;
               return (
                 <div
                   key={champion}
                   className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-600/50 hover:border-slate-500 transition-colors"
                 >
-                  <div className="font-semibold text-white min-w-[180px]">{champion}</div>
+                  <div className="flex items-center gap-2 min-w-[180px]">
+                    <div className="font-semibold text-white">{champion}</div>
+                    {/* Availability Status Indicator */}
+                    <button
+                      onClick={() => toggleChampionAvailability(champion)}
+                      disabled={isSetting}
+                      className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                        isAvailable
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500/30'
+                          : 'bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30'
+                      } ${isSetting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      title={isAvailable ? 'Available - Click to set unavailable' : 'Unavailable - Click to set available'}
+                    >
+                      {isSetting ? (
+                        <span className="animate-spin">⟳</span>
+                      ) : isAvailable ? (
+                        <Check className="w-3 h-3" />
+                      ) : (
+                        <X className="w-3 h-3" />
+                      )}
+                      <span>{isAvailable ? 'Available' : 'Unavailable'}</span>
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-2 flex-1">
                     {lanes.map((lane) => {
                       const isSelected = roles.includes(lane);
@@ -306,7 +341,7 @@ export default function AdminChampionRoles({}: AdminChampionRolesProps) {
 
       {/* Info */}
       <div className="text-sm text-slate-400 bg-slate-800/50 border border-slate-700 rounded-lg p-3">
-        <p>💡 Click on role buttons to toggle which lanes each champion can play. Changes are saved to the database and can be used to generate the champions.ts file.</p>
+        <p>💡 Click on role buttons to toggle which lanes each champion can play. Use the availability badge to mark champions as available or unavailable for the randomizer. Changes are saved to the database and can be used to generate the champions.ts file.</p>
       </div>
     </div>
   );
