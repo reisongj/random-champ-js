@@ -236,12 +236,19 @@ class ApiService {
   // Get available champions for all lanes in one request (batch endpoint for performance)
   async getAvailableChampionsBatch(): Promise<Record<string, string[]>> {
     try {
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(`${this.baseUrl}/available-champions/batch`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch batch available champions: ${response.statusText} (${response.status})`);
@@ -250,7 +257,11 @@ class ApiService {
       const data = await response.json();
       return data.championPools || {};
     } catch (error) {
-      console.error(`Error fetching batch available champions from ${this.baseUrl}:`, error);
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error(`Timeout fetching batch available champions from ${this.baseUrl}`);
+      } else {
+        console.error(`Error fetching batch available champions from ${this.baseUrl}:`, error);
+      }
       throw error;
     }
   }

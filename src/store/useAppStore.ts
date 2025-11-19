@@ -138,7 +138,14 @@ export const useAppStore = create<AppStore>()(
       loadAllAvailableChampions: async () => {
         try {
           // Use batch endpoint for better performance (1 request instead of 5)
-          const championPools = await apiService.getAvailableChampionsBatch();
+          // Add timeout to prevent hanging
+          const championPools = await Promise.race([
+            apiService.getAvailableChampionsBatch(),
+            new Promise<Record<string, string[]>>((_, reject) => 
+              setTimeout(() => reject(new Error('Batch endpoint timeout')), 8000)
+            )
+          ]);
+          
           set({
             availableChampions: {
               top: championPools.top || [],
@@ -152,8 +159,17 @@ export const useAppStore = create<AppStore>()(
         } catch (error) {
           console.error('Failed to load available champions via batch, falling back to individual calls:', error);
           // Fallback to individual calls if batch fails
+          // Use allSettled so one failure doesn't block others
           const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
-          await Promise.all(lanes.map(lane => get().loadAvailableChampions(lane)));
+          const results = await Promise.allSettled(
+            lanes.map(lane => get().loadAvailableChampions(lane))
+          );
+          // Log any failures but don't throw - optimistic defaults will be used
+          results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+              console.error(`Failed to load available champions for ${lanes[index]}:`, result.reason);
+            }
+          });
         }
       },
 
@@ -1039,41 +1055,45 @@ export const useAppStore = create<AppStore>()(
           // Load incomplete teams (localStorage, fast)
           state.loadIncompleteTeams();
           
-          // Load critical data in parallel for better performance
-          // Champion pools and available champions are needed for UI
-          // Saved teams can load in background (not critical for initial display)
-          (async () => {
+          // Load critical data asynchronously - don't block UI render
+          // All API calls are wrapped in try-catch to ensure they never block initialization
+          // The UI will show optimistic defaults immediately, then update when API responds
+          
+          // Load champion pools (non-blocking)
+          Promise.resolve().then(() => {
+            state.loadChampionPools().catch(err => {
+              console.error('Failed to load champion pools (using defaults):', err);
+            });
+          });
+          
+          // Load available champions (non-blocking)
+          Promise.resolve().then(async () => {
             try {
-              // Load champion pools and check initialization in parallel
-              const [needsInit] = await Promise.all([
-                apiService.checkNeedsInitialization().catch(() => true), // Default to true on error
-                state.loadChampionPools().catch(console.error),
-              ]);
+              const needsInit = await apiService.checkNeedsInitialization().catch(() => true);
               
-              // Load available champions (critical for UI)
               if (needsInit) {
                 console.log('Available champions table is empty, initializing...');
-                await state.initializeAvailableChampions();
+                await state.initializeAvailableChampions().catch(err => {
+                  console.error('Failed to initialize available champions:', err);
+                });
               } else {
                 // Table exists, just load available champions (will update optimistic defaults)
-                await state.loadAllAvailableChampions();
+                await state.loadAllAvailableChampions().catch(err => {
+                  console.error('Failed to load available champions (using defaults):', err);
+                });
               }
             } catch (error) {
-              console.error('Failed to load/initialize available champions:', error);
-              // Try to initialize as fallback if load fails
-              try {
-                await state.initializeAvailableChampions();
-              } catch (initError) {
-                console.error('Failed to initialize available champions:', initError);
-                // If all fails, keep the optimistic defaults (champion pools)
-                // This ensures the UI still works even if API is down
-              }
+              console.error('Error in available champions initialization:', error);
+              // Keep optimistic defaults - UI will still work
             }
-          })();
+          });
           
           // Load saved teams in background (not critical for initial UI display)
-          // This can happen after the critical UI loads
-          state.loadSavedTeams().catch(console.error);
+          Promise.resolve().then(() => {
+            state.loadSavedTeams().catch(err => {
+              console.error('Failed to load saved teams:', err);
+            });
+          });
         }
       },
     }
