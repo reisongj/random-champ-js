@@ -139,7 +139,7 @@ export const useAppStore = create<AppStore>()(
         try {
           // Use batch endpoint for better performance (1 request instead of 5)
           const championPools = await apiService.getAvailableChampionsBatch();
-          set((state) => ({
+          set({
             availableChampions: {
               top: championPools.top || [],
               jungle: championPools.jungle || [],
@@ -147,7 +147,7 @@ export const useAppStore = create<AppStore>()(
               adc: championPools.adc || [],
               support: championPools.support || [],
             },
-          }));
+          });
           console.log('Loaded all available champions via batch endpoint');
         } catch (error) {
           console.error('Failed to load available champions via batch, falling back to individual calls:', error);
