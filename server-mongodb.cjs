@@ -600,6 +600,88 @@ app.post('/api/available-champions/champion/:champion/set-available', async (req
   }
 });
 
+// Get available champions for all lanes in one request (batch endpoint for performance)
+// NOTE: This route must be defined BEFORE /api/available-champions/:lane to avoid route conflicts
+app.get('/api/available-champions/batch', async (req, res) => {
+  try {
+    const lanes = ['top', 'jungle', 'mid', 'adc', 'support'];
+    
+    // Get all champion roles once (instead of 5 times)
+    const roles = await championRolesCollection.find({}).toArray();
+    
+    // Build a map of champion -> lanes they can play
+    const championLanesMap = new Map();
+    roles.forEach(role => {
+      if (role.champion && role.lanes && Array.isArray(role.lanes)) {
+        championLanesMap.set(role.champion, role.lanes);
+      }
+    });
+    
+    // Get all availability records once (instead of 5 times)
+    const allChampions = Array.from(championLanesMap.keys());
+    const availabilityRecords = await availableChampionsCollection.find({
+      $or: [
+        { champion: { $in: allChampions } }, // New structure (no lane field)
+        { champion: { $in: allChampions }, lane: { $in: lanes } } // Old structure (with lane field)
+      ]
+    }).toArray();
+    
+    // Create maps for availability status
+    // New structure: champion -> availability (applies to all lanes)
+    const globalAvailabilityMap = new Map();
+    // Old structure: champion -> lane -> availability (per-lane)
+    const perLaneAvailabilityMap = new Map();
+    
+    // Process availability records
+    availabilityRecords.forEach(record => {
+      if (!record.lane) {
+        // New structure: one record per champion, applies to all lanes
+        globalAvailabilityMap.set(record.champion, record.isAvailable === true);
+      } else {
+        // Old structure: per-lane availability
+        if (!perLaneAvailabilityMap.has(record.champion)) {
+          perLaneAvailabilityMap.set(record.champion, new Map());
+        }
+        perLaneAvailabilityMap.get(record.champion).set(record.lane, record.isAvailable === true);
+      }
+    });
+    
+    // Build result: lane -> available champions array
+    const result = {};
+    
+    lanes.forEach(lane => {
+      const championsForLane = Array.from(championLanesMap.entries())
+        .filter(([champion, championLanes]) => championLanes.includes(lane))
+        .map(([champion]) => champion);
+      
+      // Filter champions: available if explicitly set as available (true), or if no record exists (defaults to available)
+      const availableChampions = championsForLane.filter(champion => {
+        // Check new structure first (global availability)
+        if (globalAvailabilityMap.has(champion)) {
+          return globalAvailabilityMap.get(champion) === true;
+        }
+        
+        // Check old structure (per-lane availability)
+        const perLaneMap = perLaneAvailabilityMap.get(champion);
+        if (perLaneMap && perLaneMap.has(lane)) {
+          return perLaneMap.get(lane) === true;
+        }
+        
+        // No record exists, default to available
+        return true;
+      }).sort();
+      
+      result[lane] = availableChampions;
+    });
+    
+    console.log(`GET /api/available-champions/batch - Returning champions for all ${lanes.length} lanes`);
+    res.json({ championPools: result });
+  } catch (error) {
+    console.error('Error fetching batch available champions:', error);
+    res.status(500).json({ error: 'Failed to fetch batch available champions', message: error.message });
+  }
+});
+
 // Get available champions for a specific lane
 app.get('/api/available-champions/:lane', async (req, res) => {
   try {

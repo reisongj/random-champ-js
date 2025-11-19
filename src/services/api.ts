@@ -233,6 +233,28 @@ class ApiService {
     }
   }
 
+  // Get available champions for all lanes in one request (batch endpoint for performance)
+  async getAvailableChampionsBatch(): Promise<Record<string, string[]>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/available-champions/batch`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch batch available champions: ${response.statusText} (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.championPools || {};
+    } catch (error) {
+      console.error(`Error fetching batch available champions from ${this.baseUrl}:`, error);
+      throw error;
+    }
+  }
+
   // Get available champions for a specific lane
   async getAvailableChampions(lane: string): Promise<string[]> {
     try {
