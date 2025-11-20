@@ -10,7 +10,7 @@ interface AdminTeamCreatorProps {
 }
 
 export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
-  const { createAdminTeam, createAdminTeamFromSavedTeam, championPools, getAvailableChampions, loadAllAvailableChampions, availableChampions } = useAppStore();
+  const { createAdminTeam, createAdminTeamFromSavedTeam, championPools, getAvailableChampions, loadAllAvailableChampions } = useAppStore();
   const [selectedChampions, setSelectedChampions] = useState<Record<Lane, string | null>>({
     top: null,
     jungle: null,
