@@ -21,9 +21,6 @@ export default function Lane({ lane }: LaneProps) {
     rerolledLanes,
     pendingSelections,
     hasUsedReroll,
-    availableChampions: storeAvailableChampions,
-    incompleteTeams,
-    currentTeamId,
     availableChampionsLoaded,
   } = useAppStore();
 
@@ -31,22 +28,8 @@ export default function Lane({ lane }: LaneProps) {
   const isRandomized = randomizedLanes.has(lane) || (displayingSavedTeam && champion !== null);
   const availableCount = getAvailableCount(lane);
   const availableChampions = getAvailableChampions(lane);
-  // For tooltip, use the actual available champions from the database state
-  // This ensures we only show champions that are actually available according to the database
-  // Filter out any champions that might be in incomplete teams (same logic as getAvailableChampions)
-  const incompleteTeamChampions = new Set<string>();
-  incompleteTeams.forEach(team => {
-    if (team.id !== currentTeamId) {
-      Object.values(team.team).forEach(champion => {
-        if (champion) {
-          incompleteTeamChampions.add(champion);
-        }
-      });
-    }
-  });
-  const tooltipChampions = (storeAvailableChampions[lane] || []).filter(
-    (champion) => !incompleteTeamChampions.has(champion)
-  );
+  // Use the same filtered list for the tooltip - this ensures consistency
+  // getAvailableChampions already filters based on database state and incomplete teams
   const info = laneInfo[lane];
   const rerolled = rerolledLanes[lane];
   const pendingSelection = pendingSelections[lane];
@@ -201,8 +184,8 @@ export default function Lane({ lane }: LaneProps) {
           content={
             !availableChampionsLoaded
               ? 'Loading available champions...'
-              : tooltipChampions.length > 0
-              ? tooltipChampions.join('\n')
+              : availableChampions.length > 0
+              ? availableChampions.join('\n')
               : 'No champions available'
           }
         >

@@ -21,6 +21,7 @@ interface AppStore {
   championPools: Record<Lane, string[]>; // Champion pools loaded from database
   availableChampions: Record<Lane, string[]>; // Available champions loaded from database
   availableChampionsLoaded: boolean; // Track if availableChampions have been loaded from API
+  allChampionAvailability: Record<string, boolean>; // All champion availability (same query as admin panel)
   
   // Actions
   randomizeChampion: (lane: Lane) => Promise<void>;
@@ -46,6 +47,7 @@ interface AppStore {
   loadChampionPools: () => Promise<void>; // Load champion pools from database
   loadAvailableChampions: (lane: Lane) => Promise<void>; // Load available champions for a lane from database
   loadAllAvailableChampions: () => Promise<void>; // Load available champions for all lanes
+  loadAllChampionAvailability: () => Promise<void>; // Load all champion availability (same query as admin panel)
   initializeAvailableChampions: () => Promise<void>; // Initialize available champions (first time setup)
   
   // Computed
@@ -94,6 +96,7 @@ export const useAppStore = create<AppStore>()(
         support: [...defaultChampionPools.support],
       } as Record<Lane, string[]>,
       availableChampionsLoaded: false, // Track if data has been loaded from API
+      allChampionAvailability: {}, // All champion availability map (champion -> isAvailable)
 
       loadChampionPools: async () => {
         try {
@@ -141,6 +144,12 @@ export const useAppStore = create<AppStore>()(
 
       loadAllAvailableChampions: async () => {
         try {
+          // Ensure all champion availability is loaded first
+          // This ensures getAvailableChampions uses the correct availability data
+          if (Object.keys(get().allChampionAvailability).length === 0) {
+            await get().loadAllChampionAvailability();
+          }
+          
           // Use batch endpoint for better performance (1 request instead of 5)
           // Add timeout to prevent hanging
           const championPools = await Promise.race([
@@ -181,11 +190,25 @@ export const useAppStore = create<AppStore>()(
         }
       },
 
+      loadAllChampionAvailability: async () => {
+        try {
+          const availabilityMap = await apiService.getAllChampionAvailability();
+          set({ allChampionAvailability: availabilityMap });
+          console.log('Loaded all champion availability from database');
+        } catch (error) {
+          console.error('Failed to load all champion availability:', error);
+          // Keep empty map on error - champions will default to available
+        }
+      },
+
       initializeAvailableChampions: async () => {
         try {
           await apiService.initializeAvailableChampions();
-          // After initialization, load all available champions
-          await get().loadAllAvailableChampions();
+          // After initialization, load all champion availability and available champions
+          await Promise.all([
+            get().loadAllChampionAvailability(),
+            get().loadAllAvailableChampions()
+          ]);
           // loadAllAvailableChampions already sets availableChampionsLoaded to true
           console.log('Available champions initialized and loaded');
         } catch (error) {
@@ -379,6 +402,12 @@ export const useAppStore = create<AppStore>()(
         });
         await Promise.all(removePromises);
 
+        // Update local allChampionAvailability state
+        const updatedAvailability = { ...state.allChampionAvailability };
+        championsToRemove.forEach(champion => {
+          updatedAvailability[champion] = false;
+        });
+        
         // Update local available champions state for all lanes
         const updatedAvailableChampions = { ...state.availableChampions };
         championsToRemove.forEach(champion => {
@@ -389,7 +418,10 @@ export const useAppStore = create<AppStore>()(
             }
           });
         });
-        set({ availableChampions: updatedAvailableChampions });
+        set({ 
+          availableChampions: updatedAvailableChampions,
+          allChampionAvailability: updatedAvailability
+        });
 
         // Save team in the background (don't block UI)
         // This ensures the UI is responsive while the API call happens
@@ -430,6 +462,9 @@ export const useAppStore = create<AppStore>()(
           const lanes: Lane[] = ['top', 'jungle', 'mid', 'adc', 'support'];
           await Promise.all(lanes.map(lane => apiService.resetAvailableChampions(lane)));
           
+          // Reload all champion availability to ensure consistency
+          await get().loadAllChampionAvailability();
+          
           // Reload all available champions
           await get().loadAllAvailableChampions();
           console.log('All available champions reset');
@@ -452,6 +487,9 @@ export const useAppStore = create<AppStore>()(
         // Reset available champions for each role via API
         try {
           await Promise.all(roles.map(role => apiService.resetAvailableChampions(role)));
+          
+          // Reload all champion availability to ensure consistency
+          await get().loadAllChampionAvailability();
           
           // Reload available champions for reset roles
           await Promise.all(roles.map(role => get().loadAvailableChampions(role)));
@@ -637,6 +675,9 @@ export const useAppStore = create<AppStore>()(
             // Wait for all restorations
             await Promise.all(restorePromises);
             
+            // Reload all champion availability to ensure consistency
+            await get().loadAllChampionAvailability();
+            
             // Reload available champions for all affected lanes
             await Promise.all(Array.from(affectedLanes).map(lane => get().loadAvailableChampions(lane)));
             
@@ -688,6 +729,10 @@ export const useAppStore = create<AppStore>()(
               });
               
               await Promise.all(restorePromises);
+              
+              // Reload all champion availability to ensure consistency
+              await get().loadAllChampionAvailability();
+              
               await Promise.all(Array.from(affectedLanes).map(lane => get().loadAvailableChampions(lane)));
             } catch (restoreError) {
               console.error('Failed to restore champions:', restoreError);
@@ -731,6 +776,12 @@ export const useAppStore = create<AppStore>()(
         });
         await Promise.all(removePromises);
 
+        // Update local allChampionAvailability state
+        const updatedAvailability = { ...state.allChampionAvailability };
+        championsToRemove.forEach(champion => {
+          updatedAvailability[champion] = false;
+        });
+        
         // Update local available champions state for all lanes
         const updatedAvailableChampions = { ...state.availableChampions };
         championsToRemove.forEach(champion => {
@@ -741,7 +792,10 @@ export const useAppStore = create<AppStore>()(
             }
           });
         });
-        set({ availableChampions: updatedAvailableChampions });
+        set({ 
+          availableChampions: updatedAvailableChampions,
+          allChampionAvailability: updatedAvailability
+        });
 
         try {
           // Save to shared API
@@ -807,6 +861,12 @@ export const useAppStore = create<AppStore>()(
         });
         await Promise.all(removePromises);
 
+        // Update local allChampionAvailability state
+        const updatedAvailability = { ...state.allChampionAvailability };
+        championsToRemove.forEach(champion => {
+          updatedAvailability[champion] = false;
+        });
+        
         // Update local available champions state for all lanes
         const updatedAvailableChampions = { ...state.availableChampions };
         championsToRemove.forEach(champion => {
@@ -817,7 +877,10 @@ export const useAppStore = create<AppStore>()(
             }
           });
         });
-        set({ availableChampions: updatedAvailableChampions });
+        set({ 
+          availableChampions: updatedAvailableChampions,
+          allChampionAvailability: updatedAvailability
+        });
 
         try {
           // Save to shared API
@@ -867,10 +930,35 @@ export const useAppStore = create<AppStore>()(
       getAvailableChampions: (lane) => {
         const state = get();
         
-        // Start with available champions from database (API-loaded)
-        let available = [...(state.availableChampions[lane] || [])];
+        // Step 1: Get all champions that are available (using same query as admin panel)
+        // Champions are available if:
+        // - allChampionAvailability[champion] === true, OR
+        // - allChampionAvailability[champion] === undefined (defaults to available)
+        const allAvailableChampions = new Set<string>();
+        const allChampions = new Set<string>();
         
-        // Get all champions from incomplete teams (excluding the current team being worked on)
+        // Get all unique champions from champion pools
+        Object.values(state.championPools).forEach(champs => {
+          champs.forEach(champ => allChampions.add(champ));
+        });
+        
+        // Filter by availability (same logic as admin panel)
+        allChampions.forEach(champion => {
+          const isAvailable = state.allChampionAvailability[champion];
+          // If no record exists, default to available (true)
+          // If record exists, only include if isAvailable is explicitly true
+          if (isAvailable === undefined || isAvailable === true) {
+            allAvailableChampions.add(champion);
+          }
+        });
+        
+        // Step 2: Filter by role - only include champions that can play this lane
+        const championsForLane = state.championPools[lane] || [];
+        const availableForLane = championsForLane.filter(champion => 
+          allAvailableChampions.has(champion)
+        );
+        
+        // Step 3: Filter out champions that are in other incomplete teams
         const incompleteTeamChampions = new Set<string>();
         state.incompleteTeams.forEach(team => {
           // Exclude the current incomplete team - its champions should be available for modification
@@ -883,8 +971,8 @@ export const useAppStore = create<AppStore>()(
           }
         });
         
-        // Filter out champions that are in other incomplete teams
-        return available.filter(
+        // Return filtered list
+        return availableForLane.filter(
           (champion) => !incompleteTeamChampions.has(champion)
         );
       },
@@ -1077,6 +1165,11 @@ export const useAppStore = create<AppStore>()(
           // Load available champions (non-blocking)
           Promise.resolve().then(async () => {
             try {
+              // Always load all champion availability first (same query as admin panel)
+              await state.loadAllChampionAvailability().catch(err => {
+                console.error('Failed to load all champion availability (using defaults):', err);
+              });
+              
               const needsInit = await apiService.checkNeedsInitialization().catch(() => true);
               
               if (needsInit) {

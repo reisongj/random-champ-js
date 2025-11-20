@@ -10,7 +10,7 @@ interface AdminTeamCreatorProps {
 }
 
 export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
-  const { createAdminTeam, createAdminTeamFromSavedTeam, championPools, getAvailableChampions, loadAllAvailableChampions } = useAppStore();
+  const { createAdminTeam, createAdminTeamFromSavedTeam, championPools, getAvailableChampions, loadAllAvailableChampions, availableChampions } = useAppStore();
   const [selectedChampions, setSelectedChampions] = useState<Record<Lane, string | null>>({
     top: null,
     jungle: null,
@@ -83,10 +83,12 @@ export default function AdminTeamCreator({ onClose }: AdminTeamCreatorProps) {
     for (const lane of lanes) {
       if (!(lane in team)) return false;
       if (team[lane] !== null && typeof team[lane] !== 'string') return false;
-      // Validate champion name exists in the pool for that lane
+      // Validate champion name exists and is available for that lane
       if (team[lane] !== null && typeof team[lane] === 'string') {
         const championName = team[lane] as string;
-        if (!championPools[lane].includes(championName)) {
+        // Check if champion is in the pool (can play this role) AND is available
+        const availableChamps = getAvailableChampions(lane);
+        if (!championPools[lane].includes(championName) || !availableChamps.includes(championName)) {
           return false;
         }
       }

@@ -3,7 +3,7 @@ import { useAppStore } from '../store/useAppStore';
 import { Lane, laneInfo } from '../data/champions';
 
 export default function LockedConfirmation() {
-  const { getAllPlayedCount, getAvailableCount, championPools } = useAppStore();
+  const { getAllPlayedCount, getAvailableCount, availableChampions } = useAppStore();
   const [show, setShow] = useState(true);
 
   useEffect(() => {
@@ -17,8 +17,9 @@ export default function LockedConfirmation() {
   if (!show) return null;
 
   const playedCount = getAllPlayedCount();
+  // Count unique champions across all available champions (not pools)
   const allChampions = new Set<string>();
-  Object.values(championPools).forEach((champs) => {
+  Object.values(availableChampions).forEach((champs) => {
     champs.forEach((champ) => allChampions.add(champ));
   });
   const totalUnique = allChampions.size;
@@ -38,7 +39,8 @@ export default function LockedConfirmation() {
         <div className="space-y-2">
           {Object.entries(laneInfo).map(([lane, info]) => {
             const remaining = getAvailableCount(lane as keyof typeof laneInfo);
-            const total = championPools[lane as Lane].length;
+            // Use availableChampions count (from database) instead of championPools
+            const total = availableChampions[lane as Lane]?.length || 0;
 
             return (
               <div key={lane} className="text-sm">
