@@ -21,12 +21,31 @@ export default function Lane({ lane }: LaneProps) {
     rerolledLanes,
     pendingSelections,
     hasUsedReroll,
+    availableChampions: storeAvailableChampions,
+    incompleteTeams,
+    currentTeamId,
   } = useAppStore();
 
   const champion = selectedChampions[lane];
   const isRandomized = randomizedLanes.has(lane) || (displayingSavedTeam && champion !== null);
   const availableCount = getAvailableCount(lane);
   const availableChampions = getAvailableChampions(lane);
+  // For tooltip, use the actual available champions from the database state
+  // This ensures we only show champions that are actually available according to the database
+  // Filter out any champions that might be in incomplete teams (same logic as getAvailableChampions)
+  const incompleteTeamChampions = new Set<string>();
+  incompleteTeams.forEach(team => {
+    if (team.id !== currentTeamId) {
+      Object.values(team.team).forEach(champion => {
+        if (champion) {
+          incompleteTeamChampions.add(champion);
+        }
+      });
+    }
+  });
+  const tooltipChampions = (storeAvailableChampions[lane] || []).filter(
+    (champion) => !incompleteTeamChampions.has(champion)
+  );
   const info = laneInfo[lane];
   const rerolled = rerolledLanes[lane];
   const pendingSelection = pendingSelections[lane];
@@ -179,8 +198,8 @@ export default function Lane({ lane }: LaneProps) {
         {/* Count Badge */}
         <Tooltip
           content={
-            availableChampions.length > 0
-              ? availableChampions.join('\n')
+            tooltipChampions.length > 0
+              ? tooltipChampions.join('\n')
               : 'No champions available'
           }
         >
