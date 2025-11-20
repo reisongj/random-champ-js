@@ -20,6 +20,7 @@ interface AppStore {
   resetRoles: Set<Lane>; // Track which roles have been reset (champions in these roles are available even if in saved teams)
   championPools: Record<Lane, string[]>; // Champion pools loaded from database
   availableChampions: Record<Lane, string[]>; // Available champions loaded from database
+  availableChampionsLoaded: boolean; // Track if availableChampions have been loaded from API
   
   // Actions
   randomizeChampion: (lane: Lane) => Promise<void>;
@@ -92,6 +93,7 @@ export const useAppStore = create<AppStore>()(
         adc: [...defaultChampionPools.adc],
         support: [...defaultChampionPools.support],
       } as Record<Lane, string[]>,
+      availableChampionsLoaded: false, // Track if data has been loaded from API
 
       loadChampionPools: async () => {
         try {
@@ -120,6 +122,7 @@ export const useAppStore = create<AppStore>()(
               ...state.availableChampions,
               [lane]: champions,
             },
+            availableChampionsLoaded: true, // Mark as loaded
           }));
           console.log(`Loaded ${champions.length} available champions for ${lane}`);
         } catch (error) {
@@ -131,6 +134,7 @@ export const useAppStore = create<AppStore>()(
               ...state.availableChampions,
               [lane]: state.championPools[lane] || [],
             },
+            availableChampionsLoaded: true, // Still mark as loaded (even if using fallback)
           });
         }
       },
@@ -154,6 +158,7 @@ export const useAppStore = create<AppStore>()(
               adc: championPools.adc || [],
               support: championPools.support || [],
             },
+            availableChampionsLoaded: true, // Mark as loaded
           });
           console.log('Loaded all available champions via batch endpoint');
         } catch (error) {
@@ -170,6 +175,9 @@ export const useAppStore = create<AppStore>()(
               console.error(`Failed to load available champions for ${lanes[index]}:`, result.reason);
             }
           });
+          // Mark as loaded even if some individual calls failed
+          // (loadAvailableChampions already sets the flag, but ensure it's set here too)
+          set({ availableChampionsLoaded: true });
         }
       },
 
@@ -178,9 +186,12 @@ export const useAppStore = create<AppStore>()(
           await apiService.initializeAvailableChampions();
           // After initialization, load all available champions
           await get().loadAllAvailableChampions();
+          // loadAllAvailableChampions already sets availableChampionsLoaded to true
           console.log('Available champions initialized and loaded');
         } catch (error) {
           console.error('Failed to initialize available champions:', error);
+          // Mark as loaded even on error to prevent infinite loading state
+          set({ availableChampionsLoaded: true });
         }
       },
 

@@ -24,6 +24,7 @@ export default function Lane({ lane }: LaneProps) {
     availableChampions: storeAvailableChampions,
     incompleteTeams,
     currentTeamId,
+    availableChampionsLoaded,
   } = useAppStore();
 
   const champion = selectedChampions[lane];
@@ -198,7 +199,9 @@ export default function Lane({ lane }: LaneProps) {
         {/* Count Badge */}
         <Tooltip
           content={
-            tooltipChampions.length > 0
+            !availableChampionsLoaded
+              ? 'Loading available champions...'
+              : tooltipChampions.length > 0
               ? tooltipChampions.join('\n')
               : 'No champions available'
           }
