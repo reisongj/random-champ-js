@@ -357,17 +357,14 @@ export const useAppStore = create<AppStore>()(
           }
         });
         
-        // Remove each champion from all lanes it can play
+        // Set each champion as unavailable globally (for all lanes they can play)
         championsToRemove.forEach(champion => {
-          const championLanes = get().getChampionLanes(champion);
-          championLanes.forEach(l => {
-            removePromises.push(
-              apiService.removeAvailableChampion(l, champion).catch(error => {
-                console.error(`Failed to remove ${champion} from available for ${l}:`, error);
-                // Don't fail the whole operation if one removal fails
-              })
-            );
-          });
+          removePromises.push(
+            apiService.setChampionUnavailable(champion).catch(error => {
+              console.error(`Failed to set ${champion} as unavailable:`, error);
+              // Don't fail the whole operation if one removal fails
+            })
+          );
         });
         await Promise.all(removePromises);
 
