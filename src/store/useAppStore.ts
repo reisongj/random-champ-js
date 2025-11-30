@@ -656,20 +656,27 @@ export const useAppStore = create<AppStore>()(
             const affectedLanes = new Set<Lane>();
             
             // Restore ALL champions from the deleted team (saved teams don't affect availability)
+            // Since availability is global (not per-lane), we only need to restore each champion once
+            const championsToRestore = new Set<string>();
             Object.values(teamToDelete.team).forEach((champion) => {
               if (champion) {
-                // Restore champion from ALL lanes it can play
+                championsToRestore.add(champion);
+                // Track affected lanes for reloading
                 const championLanes = get().getChampionLanes(champion);
-                championLanes.forEach(l => {
-                  affectedLanes.add(l);
-                  restorePromises.push(
-                    apiService.restoreAvailableChampion(l, champion).catch(error => {
-                      console.error(`Failed to restore ${champion} for ${l}:`, error);
-                      // Don't fail the whole operation if one restoration fails
-                    })
-                  );
-                });
+                championLanes.forEach(l => affectedLanes.add(l));
               }
+            });
+            
+            // Restore each champion once (using any lane - the endpoint uses global structure)
+            championsToRestore.forEach(champion => {
+              // Use the first lane the champion can play (the endpoint uses global structure anyway)
+              const firstLane = get().getChampionLanes(champion)[0] || 'top';
+              restorePromises.push(
+                apiService.restoreAvailableChampion(firstLane, champion).catch(error => {
+                  console.error(`Failed to restore ${champion}:`, error);
+                  // Don't fail the whole operation if one restoration fails
+                })
+              );
             });
             
             // Wait for all restorations
@@ -713,19 +720,26 @@ export const useAppStore = create<AppStore>()(
               const affectedLanes = new Set<Lane>();
               
               // Restore ALL champions from the deleted team
+              // Since availability is global (not per-lane), we only need to restore each champion once
+              const championsToRestore = new Set<string>();
               Object.values(teamToDelete.team).forEach((champion) => {
                 if (champion) {
-                  // Restore champion from ALL lanes it can play
+                  championsToRestore.add(champion);
+                  // Track affected lanes for reloading
                   const championLanes = get().getChampionLanes(champion);
-                  championLanes.forEach(l => {
-                    affectedLanes.add(l);
-                    restorePromises.push(
-                      apiService.restoreAvailableChampion(l, champion).catch(error => {
-                        console.error(`Failed to restore ${champion} for ${l}:`, error);
-                      })
-                    );
-                  });
+                  championLanes.forEach(l => affectedLanes.add(l));
                 }
+              });
+              
+              // Restore each champion once (using any lane - the endpoint uses global structure)
+              championsToRestore.forEach(champion => {
+                // Use the first lane the champion can play (the endpoint uses global structure anyway)
+                const firstLane = get().getChampionLanes(champion)[0] || 'top';
+                restorePromises.push(
+                  apiService.restoreAvailableChampion(firstLane, champion).catch(error => {
+                    console.error(`Failed to restore ${champion}:`, error);
+                  })
+                );
               });
               
               await Promise.all(restorePromises);

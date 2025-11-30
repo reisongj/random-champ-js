@@ -784,14 +784,15 @@ app.post('/api/available-champions/:lane/restore', async (req, res) => {
       return res.status(400).json({ error: 'Champion name is required' });
     }
     
-    // Update the champion to mark as available
+    // Restore champion using the new global structure (no lane field)
+    // This matches how set-available works - sets champion as available globally
     const result = await availableChampionsCollection.updateOne(
-      { lane, champion },
-      { $set: { isAvailable: true } },
+      { champion }, // Match any record for this champion (with or without lane field)
+      { $set: { champion, isAvailable: true }, $unset: { lane: "" } },
       { upsert: true }
     );
     
-    console.log(`POST /api/available-champions/${lane}/restore - Restored ${champion} to available`);
+    console.log(`POST /api/available-champions/${lane}/restore - Restored ${champion} to available (global)`);
     res.json({ message: 'Champion restored to available', champion, lane });
   } catch (error) {
     console.error('Error restoring champion:', error);
