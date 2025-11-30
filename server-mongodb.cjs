@@ -819,22 +819,17 @@ app.post('/api/available-champions/:lane/reset', async (req, res) => {
       return res.status(404).json({ error: `No champions found for lane: ${lane}` });
     }
     
-    // Reset ALL champions for this lane (saved teams don't affect availability)
-    // Also reset them for ALL lanes they can play (since champions are removed from all lanes when used)
+    // Reset champions using the new global structure (no lane field)
+    // This sets champions as available globally, which is what the availability check uses
     const operations = [];
     championsForLane.forEach(champion => {
-      // Find all lanes this champion can play
-      roles.forEach(role => {
-        if (role.champion === champion && role.lanes && Array.isArray(role.lanes)) {
-          role.lanes.forEach(championLane => {
-            operations.push({
-              updateOne: {
-                filter: { lane: championLane, champion },
-                update: { $set: { lane: championLane, champion, isAvailable: true } },
-                upsert: true
-              }
-            });
-          });
+      // Set champion as available globally (no lane field) - this is what matters for availability
+      // Match any record for this champion (with or without lane field) and convert to global structure
+      operations.push({
+        updateOne: {
+          filter: { champion }, // Match any record for this champion
+          update: { $set: { champion, isAvailable: true }, $unset: { lane: "" } },
+          upsert: true
         }
       });
     });
@@ -843,7 +838,7 @@ app.post('/api/available-champions/:lane/reset', async (req, res) => {
       await availableChampionsCollection.bulkWrite(operations);
     }
     
-    console.log(`POST /api/available-champions/${lane}/reset - Reset all ${championsForLane.length} champions for ${lane}`);
+    console.log(`POST /api/available-champions/${lane}/reset - Reset all ${championsForLane.length} champions for ${lane} (global availability)`);
     res.json({ 
       message: `Reset all champions for ${lane}`,
       count: championsForLane.length,
